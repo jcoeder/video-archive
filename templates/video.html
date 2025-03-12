@@ -6,15 +6,33 @@
         <div class="card mb-4">
             <div class="card-body">
                 <h2 class="card-title">{{ video.title }}</h2>
-                <video class="w-100 mb-3" controls>
-                    <source src="/{{ video.file_path }}" type="video/mp4">
-                    Your browser does not support the video tag.
-                </video>
-                <p class="text-muted">
-                    Archived: {{ video.date_archived.strftime('%Y-%m-%d %H:%M') }}
-                </p>
+                <div class="video-container position-relative">
+                    <video class="w-100 mb-3" controls preload="metadata">
+                        <source src="{{ url_for('static', filename=video.file_path.replace('static/', '')) }}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <p class="text-muted mb-0">
+                        Archived: {{ video.date_archived.strftime('%Y-%m-%d %H:%M') }}
+                    </p>
+                    <div>
+                        {% for category in video.categories %}
+                        <span class="badge bg-secondary">{{ category.name }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
         </div>
+
+        {% if video.notes %}
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Notes</h5>
+                <p class="card-text">{{ video.notes }}</p>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <div class="col-lg-4">
@@ -40,8 +58,10 @@
                         <textarea class="form-control" id="notes" name="notes" 
                                   rows="5">{{ video.notes or '' }}</textarea>
                     </div>
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
-                    <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Library</a>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Library</a>
+                    </div>
                 </form>
             </div>
         </div>

@@ -1,5 +1,6 @@
 import os
 import logging
+import subprocess
 from datetime import datetime
 import cv2
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
@@ -28,7 +29,7 @@ db.init_app(app)
 # Configure upload settings
 UPLOAD_FOLDER = 'static/uploads'
 THUMBNAIL_FOLDER = 'static/thumbnails'
-ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
+ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm'}
 
 # Create necessary directories
 for folder in [UPLOAD_FOLDER, THUMBNAIL_FOLDER]:
@@ -40,6 +41,32 @@ app.config['THUMBNAIL_FOLDER'] = THUMBNAIL_FOLDER
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def transcode_video(input_path, output_path):
+    """Transcode video to web-compatible format (MP4/H.264)"""
+    try:
+        cmd = [
+            'ffmpeg', '-i', input_path,
+            '-c:v', 'libx264',  # Video codec
+            '-preset', 'medium',  # Encoding speed preset
+            '-crf', '23',  # Quality (23 is a good balance)
+            '-c:a', 'aac',  # Audio codec
+            '-b:a', '128k',  # Audio bitrate
+            '-movflags', '+faststart',  # Enable streaming
+            '-y',  # Overwrite output file if exists
+            output_path
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            logging.error(f"Transcoding failed: {result.stderr}")
+            return False
+
+        return True
+    except Exception as e:
+        logging.error(f"Error transcoding video: {str(e)}")
+        return False
 
 def generate_thumbnail(video_path, output_path):
     try:
@@ -94,43 +121,65 @@ def upload_video():
         if 'video' in request.files:
             file = request.files['video']
             if file and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(filepath)
+                original_filename = secure_filename(file.filename)
+                original_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"original_{original_filename}")
+                file.save(original_filepath)
 
-                # Generate thumbnail
-                thumbnail_filename = f"{os.path.splitext(filename)[0]}_thumb.jpg"
-                thumbnail_path = os.path.join(app.config['THUMBNAIL_FOLDER'], thumbnail_filename)
-                generate_thumbnail(filepath, thumbnail_path)
+                # Transcode to web-compatible format
+                final_filename = f"web_{original_filename.rsplit('.', 1)[0]}.mp4"
+                final_filepath = os.path.join(app.config['UPLOAD_FOLDER'], final_filename)
 
-                video = Video(
-                    title=filename,
-                    file_path=filepath,
-                    thumbnail_path=f"{app.config['THUMBNAIL_FOLDER']}/{thumbnail_filename}",
-                    notes=notes,
-                    date_archived=datetime.now()
-                )
+                if transcode_video(original_filepath, final_filepath):
+                    # Generate thumbnail from transcoded video
+                    thumbnail_filename = f"{os.path.splitext(final_filename)[0]}_thumb.jpg"
+                    thumbnail_path = os.path.join(app.config['THUMBNAIL_FOLDER'], thumbnail_filename)
+                    generate_thumbnail(final_filepath, thumbnail_path)
+
+                    video = Video(
+                        title=os.path.splitext(original_filename)[0],
+                        file_path=final_filepath,
+                        thumbnail_path=f"{app.config['THUMBNAIL_FOLDER']}/{thumbnail_filename}",
+                        notes=notes,
+                        date_archived=datetime.now()
+                    )
+
+                    # Clean up original file
+                    os.remove(original_filepath)
+                else:
+                    flash('Error processing video file', 'error')
+                    return redirect(url_for('index'))
 
         elif 'youtube_url' in request.form:
             url = request.form['youtube_url']
             yt = YouTube(url)
             stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
-            filename = secure_filename(yt.title + '.mp4')
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            stream.download(output_path=app.config['UPLOAD_FOLDER'], filename=filename)
+            original_filename = secure_filename(yt.title + '.mp4')
+            original_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"original_{original_filename}")
+            stream.download(output_path=app.config['UPLOAD_FOLDER'], filename=f"original_{original_filename}")
 
-            # Generate thumbnail for YouTube video
-            thumbnail_filename = f"{os.path.splitext(filename)[0]}_thumb.jpg"
-            thumbnail_path = os.path.join(app.config['THUMBNAIL_FOLDER'], thumbnail_filename)
-            generate_thumbnail(filepath, thumbnail_path)
+            # Transcode YouTube video
+            final_filename = f"web_{original_filename}"
+            final_filepath = os.path.join(app.config['UPLOAD_FOLDER'], final_filename)
 
-            video = Video(
-                title=yt.title,
-                file_path=filepath,
-                thumbnail_path=f"{app.config['THUMBNAIL_FOLDER']}/{thumbnail_filename}",
-                notes=notes,
-                date_archived=datetime.now()
-            )
+            if transcode_video(original_filepath, final_filepath):
+                # Generate thumbnail for YouTube video
+                thumbnail_filename = f"{os.path.splitext(final_filename)[0]}_thumb.jpg"
+                thumbnail_path = os.path.join(app.config['THUMBNAIL_FOLDER'], thumbnail_filename)
+                generate_thumbnail(final_filepath, thumbnail_path)
+
+                video = Video(
+                    title=yt.title,
+                    file_path=final_filepath,
+                    thumbnail_path=f"{app.config['THUMBNAIL_FOLDER']}/{thumbnail_filename}",
+                    notes=notes,
+                    date_archived=datetime.now()
+                )
+
+                # Clean up original file
+                os.remove(original_filepath)
+            else:
+                flash('Error processing YouTube video', 'error')
+                return redirect(url_for('index'))
 
         # Add categories
         for category_id in categories:

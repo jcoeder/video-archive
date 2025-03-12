@@ -44,3 +44,28 @@
 .alert.fade.removing {
     opacity: 0;
 }
+
+/* Video player styles */
+.video-container {
+    background-color: var(--bs-dark);
+    border-radius: 0.375rem;
+    overflow: hidden;
+}
+
+video {
+    display: block;
+    max-height: 70vh;
+    margin: 0 auto;
+}
+
+/* Ensure proper spacing for video controls */
+video::-webkit-media-controls {
+    background-color: var(--bs-dark);
+}
+
+/* Responsive video container */
+@media (max-width: 768px) {
+    video {
+        max-height: 50vh;
+    }
+}
