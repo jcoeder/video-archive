@@ -10,6 +10,7 @@ class Video(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     file_path = db.Column(db.String(500), nullable=False)
+    thumbnail_path = db.Column(db.String(500))
     notes = db.Column(db.Text)
     date_archived = db.Column(db.DateTime, default=datetime.utcnow)
     categories = db.relationship('Category', secondary=video_categories, lazy='subquery',

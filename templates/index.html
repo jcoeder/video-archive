@@ -64,6 +64,12 @@
             {% for video in videos %}
             <div class="col-md-6 mb-4">
                 <div class="card video-card h-100">
+                    {% if video.thumbnail_path %}
+                    <img src="{{ url_for('static', filename=video.thumbnail_path.replace('static/', '')) }}" 
+                         class="card-img-top video-thumbnail" alt="{{ video.title }}">
+                    {% else %}
+                    <div class="video-thumbnail"></div>
+                    {% endif %}
                     <div class="card-body">
                         <h4 class="card-title mb-2">{{ video.title }}</h4>
                         {% if video.notes %}
