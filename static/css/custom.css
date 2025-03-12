@@ -26,8 +26,8 @@
 
 .video-card {
     transition: transform 0.2s;
-    position: relative; /* Added to accommodate the video preview */
-    overflow: hidden;     /* Added to hide overflowing video preview */
+    position: relative;
+    overflow: hidden;
 }
 
 .video-card:hover {
@@ -72,6 +72,27 @@ video {
     transition: opacity 0.3s ease;
 }
 
+/* Tab styles */
+.nav-tabs {
+    border-bottom-color: var(--bs-border-color);
+}
+
+.nav-tabs .nav-link {
+    color: var(--bs-body-color);
+    border: none;
+    padding: 1rem 1.5rem;
+}
+
+.nav-tabs .nav-link:hover {
+    border-color: transparent;
+    isolation: isolate;
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--bs-primary);
+    background-color: transparent;
+    border-bottom: 2px solid var(--bs-primary);
+}
 
 /* Ensure proper spacing for video controls */
 video::-webkit-media-controls {
