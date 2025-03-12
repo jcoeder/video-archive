@@ -65,8 +65,11 @@
             <div class="col-md-6 mb-4">
                 <div class="card video-card h-100">
                     {% if video.thumbnail_path %}
-                    <img src="{{ url_for('static', filename=video.thumbnail_path.replace('static/', '')) }}" 
+                    <img src="{{ url_for('static', filename=video.thumbnail_path) }}" 
                          class="card-img-top video-thumbnail" alt="{{ video.title }}">
+                    <video class="video-preview" muted preload="metadata">
+                        <source src="{{ url_for('static', filename=video.file_path) }}" type="video/mp4">
+                    </video>
                     {% else %}
                     <div class="video-thumbnail"></div>
                     {% endif %}

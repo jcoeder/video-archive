@@ -87,6 +87,33 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Video preview on hover
+    const videoCards = document.querySelectorAll('.video-card');
+    videoCards.forEach(card => {
+        const previewVideo = card.querySelector('.video-preview');
+        const thumbnail = card.querySelector('.video-thumbnail');
+
+        if (previewVideo && thumbnail) {
+            let timeoutId;
+
+            card.addEventListener('mouseenter', () => {
+                timeoutId = setTimeout(() => {
+                    thumbnail.style.display = 'none';
+                    previewVideo.style.display = 'block';
+                    previewVideo.play().catch(e => console.log('Preview autoplay prevented'));
+                }, 500); // Start preview after 500ms hover
+            });
+
+            card.addEventListener('mouseleave', () => {
+                clearTimeout(timeoutId);
+                previewVideo.style.display = 'none';
+                thumbnail.style.display = 'block';
+                previewVideo.pause();
+                previewVideo.currentTime = 0;
+            });
+        }
+    });
+
     // Initialize tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {

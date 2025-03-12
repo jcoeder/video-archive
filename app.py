@@ -137,8 +137,8 @@ def upload_video():
 
                     video = Video(
                         title=os.path.splitext(original_filename)[0],
-                        file_path=final_filepath,
-                        thumbnail_path=f"{app.config['THUMBNAIL_FOLDER']}/{thumbnail_filename}",
+                        file_path=f"uploads/{final_filename}",  # Store relative path
+                        thumbnail_path=f"thumbnails/{thumbnail_filename}",  # Store relative path
                         notes=notes,
                         date_archived=datetime.now()
                     )
@@ -169,8 +169,8 @@ def upload_video():
 
                 video = Video(
                     title=yt.title,
-                    file_path=final_filepath,
-                    thumbnail_path=f"{app.config['THUMBNAIL_FOLDER']}/{thumbnail_filename}",
+                    file_path=f"uploads/{final_filename}",  # Store relative path
+                    thumbnail_path=f"thumbnails/{thumbnail_filename}",  # Store relative path
                     notes=notes,
                     date_archived=datetime.now()
                 )
