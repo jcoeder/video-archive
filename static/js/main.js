@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     categoriesContainer.appendChild(newCategory);
                     categoryInput.value = ''; // Clear input
 
-                    // Show success message
+                    // Show success message that disappears after 2 seconds
                     const alert = document.createElement('div');
                     alert.className = 'alert alert-success alert-dismissible fade show';
                     alert.innerHTML = `
@@ -65,8 +65,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     `;
                     categoryForm.insertAdjacentElement('beforebegin', alert);
+                    setTimeout(() => {
+                        alert.classList.remove('show');
+                        setTimeout(() => alert.remove(), 150); // Remove after fade animation
+                    }, 2000);
                 } else {
-                    // Show error message
+                    // Show error message that disappears after 2 seconds
                     const alert = document.createElement('div');
                     alert.className = 'alert alert-danger alert-dismissible fade show';
                     alert.innerHTML = `
@@ -74,6 +78,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     `;
                     categoryForm.insertAdjacentElement('beforebegin', alert);
+                    setTimeout(() => {
+                        alert.classList.remove('show');
+                        setTimeout(() => alert.remove(), 150); // Remove after fade animation
+                    }, 2000);
                 }
             });
         });
