@@ -25,6 +25,60 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Add category form handling
+    const categoryForm = document.getElementById('categoryForm');
+    if (categoryForm) {
+        categoryForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const categoryInput = categoryForm.querySelector('input[name="category_name"]');
+            const categoryName = categoryInput.value;
+
+            fetch('/category/add', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `category_name=${encodeURIComponent(categoryName)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Add new category to the list
+                    const categoriesContainer = document.getElementById('categoriesContainer');
+                    const newCategory = document.createElement('div');
+                    newCategory.className = 'form-check';
+                    newCategory.innerHTML = `
+                        <input class="form-check-input" type="checkbox" name="categories" 
+                               value="${data.category.id}" id="category${data.category.id}">
+                        <label class="form-check-label" for="category${data.category.id}">
+                            ${data.category.name}
+                        </label>
+                    `;
+                    categoriesContainer.appendChild(newCategory);
+                    categoryInput.value = ''; // Clear input
+
+                    // Show success message
+                    const alert = document.createElement('div');
+                    alert.className = 'alert alert-success alert-dismissible fade show';
+                    alert.innerHTML = `
+                        Category added successfully!
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    categoryForm.insertAdjacentElement('beforebegin', alert);
+                } else {
+                    // Show error message
+                    const alert = document.createElement('div');
+                    alert.className = 'alert alert-danger alert-dismissible fade show';
+                    alert.innerHTML = `
+                        ${data.error}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    categoryForm.insertAdjacentElement('beforebegin', alert);
+                }
+            });
+        });
+    }
+
     // Initialize tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {

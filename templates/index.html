@@ -18,15 +18,17 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Categories</label>
-                        {% for category in categories %}
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="categories" 
-                                   value="{{ category.id }}" id="category{{ category.id }}">
-                            <label class="form-check-label" for="category{{ category.id }}">
-                                {{ category.name }}
-                            </label>
+                        <div id="categoriesContainer">
+                            {% for category in categories %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="categories" 
+                                       value="{{ category.id }}" id="category{{ category.id }}">
+                                <label class="form-check-label" for="category{{ category.id }}">
+                                    {{ category.name }}
+                                </label>
+                            </div>
+                            {% endfor %}
                         </div>
-                        {% endfor %}
                     </div>
                     <div class="mb-3">
                         <label for="notes" class="form-label">Notes</label>
@@ -45,7 +47,7 @@
         <div class="card mt-4">
             <div class="card-body">
                 <h5 class="card-title">Add Category</h5>
-                <form action="{{ url_for('add_category') }}" method="post">
+                <form id="categoryForm">
                     <div class="input-group">
                         <input type="text" class="form-control" name="category_name" required
                                placeholder="Category name">
@@ -63,7 +65,12 @@
             <div class="col-md-6 mb-4">
                 <div class="card video-card h-100">
                     <div class="card-body">
-                        <h5 class="card-title">{{ video.title }}</h5>
+                        <h4 class="card-title mb-2">{{ video.title }}</h4>
+                        {% if video.notes %}
+                        <p class="card-text text-muted mb-3">
+                            {{ video.notes[:20] }}{% if video.notes|length > 20 %}...{% endif %}
+                        </p>
+                        {% endif %}
                         <p class="card-text">
                             <small class="text-muted">
                                 Archived: {{ video.date_archived.strftime('%Y-%m-%d %H:%M') }}

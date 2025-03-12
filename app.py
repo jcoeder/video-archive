@@ -1,7 +1,7 @@
 import os
 import logging
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.utils import secure_filename
@@ -124,11 +124,24 @@ def add_category():
     from models import Category
     name = request.form.get('category_name')
     if name:
-        category = Category(name=name)
-        db.session.add(category)
-        db.session.commit()
-        flash('Category added successfully!', 'success')
-    return redirect(url_for('index'))
+        try:
+            category = Category(name=name)
+            db.session.add(category)
+            db.session.commit()
+            return jsonify({
+                'success': True,
+                'category': {'id': category.id, 'name': category.name}
+            })
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({
+                'success': False,
+                'error': 'Category already exists or invalid name'
+            })
+    return jsonify({
+        'success': False,
+        'error': 'Category name is required'
+    })
 
 with app.app_context():
     from models import Video, Category
