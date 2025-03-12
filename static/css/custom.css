@@ -31,3 +31,16 @@
 .video-card:hover {
     transform: translateY(-2px);
 }
+
+/* Add smooth fade transition for alerts */
+.alert {
+    transition: opacity 1s ease-out;
+}
+
+.alert.fade {
+    opacity: 1;
+}
+
+.alert.fade.removing {
+    opacity: 0;
+}

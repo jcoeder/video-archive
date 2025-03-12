@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     categoriesContainer.appendChild(newCategory);
                     categoryInput.value = ''; // Clear input
 
-                    // Show success message that disappears after 2 seconds
+                    // Show success message that disappears after 4 seconds with 1s fade
                     const alert = document.createElement('div');
                     alert.className = 'alert alert-success alert-dismissible fade show';
                     alert.innerHTML = `
@@ -66,11 +66,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                     categoryForm.insertAdjacentElement('beforebegin', alert);
                     setTimeout(() => {
-                        alert.classList.remove('show');
-                        setTimeout(() => alert.remove(), 150); // Remove after fade animation
-                    }, 2000);
+                        alert.classList.add('removing');
+                        setTimeout(() => alert.remove(), 1000); // Remove after 1s fade
+                    }, 4000);
                 } else {
-                    // Show error message that disappears after 2 seconds
+                    // Show error message that disappears after 4 seconds with 1s fade
                     const alert = document.createElement('div');
                     alert.className = 'alert alert-danger alert-dismissible fade show';
                     alert.innerHTML = `
@@ -79,9 +79,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                     categoryForm.insertAdjacentElement('beforebegin', alert);
                     setTimeout(() => {
-                        alert.classList.remove('show');
-                        setTimeout(() => alert.remove(), 150); // Remove after fade animation
-                    }, 2000);
+                        alert.classList.add('removing');
+                        setTimeout(() => alert.remove(), 1000); // Remove after 1s fade
+                    }, 4000);
                 }
             });
         });
