@@ -677,9 +677,29 @@ def delete_user(user_id):
 
                             # Update video ownership and paths
                             video.user_id = transfer_user.id
-                            video.file_path = video.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
+
+                            # Get old and new paths for all file types
+                            old_web_path = os.path.join('static', video.file_path)
+                            new_web_path = os.path.join('static', video.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path()))
+
+                            # Handle original file paths
+                            filename = os.path.basename(video.file_path)
+                            if filename.startswith('web_'):
+                                original_filename = f"original_{filename[4:]}"  # Remove 'web_' prefix
+                            else:
+                                original_filename = f"original_{filename}"
+
+                            old_original_path = os.path.join('static/uploads', user.get_storage_path(), original_filename)
+                            new_original_path = os.path.join('static/uploads', transfer_user.get_storage_path(), original_filename)
+
+                            # Update thumbnail paths
                             if video.thumbnail_path:
+                                old_thumb_path = os.path.join('static', video.thumbnail_path)
+                                new_thumb_path = os.path.join('static', video.thumbnail_path.replace(user.get_storage_path(), transfer_user.get_storage_path()))
                                 video.thumbnail_path = video.thumbnail_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
+
+                            # Update video file path
+                            video.file_path = video.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
                             db.session.add(video)
 
                             # Process categories for this video
@@ -704,19 +724,39 @@ def delete_user(user_id):
                         # Move files after successful database update
                         import shutil
                         for video in videos_to_transfer:
-                            old_path = os.path.join('static', video.file_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
-                            new_path = os.path.join('static', video.file_path)
+                            # Get all possible file paths
+                            old_web_path = os.path.join('static', video.file_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
+                            new_web_path = os.path.join('static', video.file_path)
 
-                            if os.path.exists(old_path):
-                                os.makedirs(os.path.dirname(new_path), exist_ok=True)
-                                shutil.move(old_path, new_path)
+                            filename = os.path.basename(video.file_path)
+                            if filename.startswith('web_'):
+                                original_filename = f"original_{filename[4:]}"
+                            else:
+                                original_filename = f"original_{filename}"
 
+                            old_original_path = os.path.join('static/uploads', user.get_storage_path(), original_filename)
+                            new_original_path = os.path.join('static/uploads', transfer_user.get_storage_path(), original_filename)
+
+                            # Move web version
+                            if os.path.exists(old_web_path):
+                                os.makedirs(os.path.dirname(new_web_path), exist_ok=True)
+                                shutil.move(old_web_path, new_web_path)
+                                logging.info(f"Moved web version: {old_web_path} -> {new_web_path}")
+
+                            # Move original version
+                            if os.path.exists(old_original_path):
+                                os.makedirs(os.path.dirname(new_original_path), exist_ok=True)
+                                shutil.move(old_original_path, new_original_path)
+                                logging.info(f"Moved original version: {old_original_path} -> {new_original_path}")
+
+                            # Move thumbnail if exists
                             if video.thumbnail_path:
                                 old_thumb = os.path.join('static', video.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
                                 new_thumb = os.path.join('static', video.thumbnail_path)
                                 if os.path.exists(old_thumb):
                                     os.makedirs(os.path.dirname(new_thumb), exist_ok=True)
                                     shutil.move(old_thumb, new_thumb)
+                                    logging.info(f"Moved thumbnail: {old_thumb} -> {new_thumb}")
 
                     except Exception as e:
                         db.session.rollback()
