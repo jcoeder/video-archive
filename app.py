@@ -311,10 +311,10 @@ def index():
     from models import Video, Category
     if current_user.is_admin:
         videos = Video.query.order_by(Video.date_archived.desc()).all()
-        categories = Category.query.all()
+        categories = Category.query.order_by(Category.name).all()
     else:
         videos = Video.query.filter_by(user_id=current_user.id).order_by(Video.date_archived.desc()).all()
-        categories = Category.query.filter_by(user_id=current_user.id).all()
+        categories = Category.query.filter_by(user_id=current_user.id).order_by(Category.name).all()
     return render_template('index.html', videos=videos, categories=categories)
 
 @app.route('/upload', methods=['POST'])
