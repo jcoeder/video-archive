@@ -666,8 +666,15 @@ def delete_user(user_id):
                         # Get existing categories for transfer user
                         existing_categories = {cat.name.lower(): cat for cat in transfer_user.categories}
 
-                        # First, transfer all videos to new user and update paths
-                        for video in Video.query.filter_by(user_id=user.id).all():
+                        # First, transfer all videos to new user
+                        videos_to_transfer = Video.query.filter_by(user_id=user.id).all()
+                        for video in videos_to_transfer:
+                            # Store video categories before transfer
+                            video_categories = list(video.categories)
+
+                            # Clear existing category relationships
+                            video.categories = []
+
                             # Update video ownership and paths
                             video.user_id = transfer_user.id
                             video.file_path = video.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
@@ -675,35 +682,28 @@ def delete_user(user_id):
                                 video.thumbnail_path = video.thumbnail_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
                             db.session.add(video)
 
-                        # Commit video ownership changes first
-                        db.session.commit()
+                            # Process categories for this video
+                            for old_category in video_categories:
+                                transfer_category = existing_categories.get(old_category.name.lower())
+                                if not transfer_category:
+                                    # Create new category for transfer user
+                                    transfer_category = Category(
+                                        name=old_category.name,
+                                        user_id=transfer_user.id
+                                    )
+                                    db.session.add(transfer_category)
+                                    existing_categories[transfer_category.name.lower()] = transfer_category
 
-                        # Now handle categories and their relationships
-                        for category in Category.query.filter_by(user_id=user.id).all():
-                            # Find or create corresponding category for transfer user
-                            transfer_category = existing_categories.get(category.name.lower())
-                            if not transfer_category:
-                                transfer_category = Category(
-                                    name=category.name,
-                                    user_id=transfer_user.id
-                                )
-                                db.session.add(transfer_category)
-                                existing_categories[category.name.lower()] = transfer_category
-
-                            # Move videos to transfer category
-                            for video in category.videos:
+                                # Add video to transfer category
                                 if video not in transfer_category.videos:
                                     transfer_category.videos.append(video)
 
-                            # Delete old category
-                            db.session.delete(category)
-
-                        # Commit category changes
+                        # Commit changes to ensure video transfers are saved
                         db.session.commit()
 
-                        # Now move files after successful database update
+                        # Move files after successful database update
                         import shutil
-                        for video in Video.query.filter_by(user_id=transfer_user.id).all():
+                        for video in videos_to_transfer:
                             old_path = os.path.join('static', video.file_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
                             new_path = os.path.join('static', video.file_path)
 
@@ -722,14 +722,14 @@ def delete_user(user_id):
                         db.session.rollback()
                         raise e
 
-        else:
+        else:  # Delete content
             # Delete all content if not transferring
             for video in user.videos:
                 db.session.delete(video)
             for category in user.categories:
                 db.session.delete(category)
 
-        # Delete user's folders
+        # Delete the user's folders
         try:
             import shutil
             if os.path.exists(user_upload_folder):
@@ -739,7 +739,10 @@ def delete_user(user_id):
         except Exception as e:
             logging.error(f"Error deleting user folders: {str(e)}")
 
-        # Finally delete the user
+        # Finally delete the user and their categories
+        # Delete categories first to avoid foreign key constraints
+        for category in Category.query.filter_by(user_id=user.id).all():
+            db.session.delete(category)
         db.session.delete(user)
         db.session.commit()
         flash(f'User {user.username} deleted successfully!', 'success')
@@ -793,8 +796,7 @@ def check_and_sync_video_files():
                         logging.error(f"Errorremoving thumbnail for video {video.id}: {str(e)}")
             else:
                 # If original exists but web version is missing, create it
-                if os.path.exists(original_file) andnot os.path.exists(web_file):
-
+                if os.path.exists(original_file) and not os.path.exists(web_file):
                     logging.info(f"Regenerating web version for video {video.id}")
                     if transcode_video(original_file, web_file):
                         video.exists = True
