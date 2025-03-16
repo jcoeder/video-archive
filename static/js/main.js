@@ -54,6 +54,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Add category form handling
     const categoryForm = document.getElementById('categoryForm');
+    const addCategoryModal = document.getElementById('addCategoryModal');
+    const modal = addCategoryModal ? bootstrap.Modal.getOrCreateInstance(addCategoryModal) : null;
+
     if (categoryForm) {
         categoryForm.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -70,7 +73,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Add new category to the list
+                    // Add new category to the dropdown in the modal
                     const categoriesContainer = document.getElementById('categoriesContainer');
                     const newCategory = document.createElement('div');
                     newCategory.className = 'form-check';
@@ -84,31 +87,48 @@ document.addEventListener('DOMContentLoaded', function() {
                     categoriesContainer.appendChild(newCategory);
                     categoryInput.value = ''; // Clear input
 
-                    // Show success message
-                    const alert = document.createElement('div');
-                    alert.className = 'alert alert-success alert-dismissible fade show';
-                    alert.innerHTML = `
-                        Category added successfully!
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    // Close the modal
+                    if (modal) {
+                        modal.hide();
+                    }
+
+                    // Show success toast
+                    const toast = new bootstrap.Toast(document.createElement('div'));
+                    toast.element.className = 'toast align-items-center text-bg-success border-0 position-fixed bottom-0 end-0 m-3';
+                    toast.element.innerHTML = `
+                        <div class="d-flex">
+                            <div class="toast-body">
+                                Category added successfully!
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                        </div>
                     `;
-                    categoryForm.insertAdjacentElement('beforebegin', alert);
-                    setTimeout(() => {
-                        alert.classList.add('removing');
-                        setTimeout(() => alert.remove(), 1000);
-                    }, 4000);
+                    document.body.appendChild(toast.element);
+                    toast.show();
+
+                    // Remove toast after it's hidden
+                    toast.element.addEventListener('hidden.bs.toast', () => {
+                        toast.element.remove();
+                    });
                 } else {
-                    // Show error message
-                    const alert = document.createElement('div');
-                    alert.className = 'alert alert-danger alert-dismissible fade show';
-                    alert.innerHTML = `
-                        ${data.error}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    // Show error toast
+                    const toast = new bootstrap.Toast(document.createElement('div'));
+                    toast.element.className = 'toast align-items-center text-bg-danger border-0 position-fixed bottom-0 end-0 m-3';
+                    toast.element.innerHTML = `
+                        <div class="d-flex">
+                            <div class="toast-body">
+                                ${data.error}
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                        </div>
                     `;
-                    categoryForm.insertAdjacentElement('beforebegin', alert);
-                    setTimeout(() => {
-                        alert.classList.add('removing');
-                        setTimeout(() => alert.remove(), 1000);
-                    }, 4000);
+                    document.body.appendChild(toast.element);
+                    toast.show();
+
+                    // Remove toast after it's hidden
+                    toast.element.addEventListener('hidden.bs.toast', () => {
+                        toast.element.remove();
+                    });
                 }
             });
         });

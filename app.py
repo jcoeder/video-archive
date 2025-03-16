@@ -169,36 +169,58 @@ def transcode_video(input_path, output_path):
             '-c:a', 'aac',  # Audio codec
             '-b:a', '128k',  # Audio bitrate
             '-movflags', '+faststart',  # Enable streaming
+            '-map_metadata', '0',  # Copy metadata
+            '-metadata', 'encoding_tool=ffmpeg',  # Add encoding tool info
             '-y',  # Overwrite output file if exists
             output_path
         ]
 
+        # Run FFmpeg with detailed logging
+        logging.info(f"Starting video transcoding: {input_path} -> {output_path}")
         result = subprocess.run(cmd, capture_output=True, text=True)
 
         if result.returncode != 0:
             logging.error(f"Transcoding failed: {result.stderr}")
             return False
 
+        # Verify the output file exists and has size
+        if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            logging.error("Transcoding failed: Output file is missing or empty")
+            return False
+
+        logging.info("Video transcoding completed successfully")
         return True
     except Exception as e:
         logging.error(f"Error transcoding video: {str(e)}")
         return False
 
 def generate_thumbnail(video_path, output_path):
+    """Generate thumbnail from video"""
     try:
         # Ensure the output directory exists
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
+        logging.info(f"Generating thumbnail from video: {video_path}")
+
+        # Try to open video file
         cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            logging.error(f"Failed to open video file: {video_path}")
+            return False
+
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if total_frames == 0:
+            logging.error(f"Video has no frames: {video_path}")
+            return False
 
-        if total_frames < 10:
-            frame_number = 0
-        else:
-            frame_number = 10
-
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        # Try to read frame at 1 second mark
+        cap.set(cv2.CAP_PROP_POS_MSEC, 1000)  # 1 second in
         ret, frame = cap.read()
+
+        if not ret:
+            # If failed, try first frame
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ret, frame = cap.read()
 
         if ret:
             # Resize frame to a reasonable thumbnail size
@@ -207,9 +229,16 @@ def generate_thumbnail(video_path, output_path):
             width = int(height * aspect_ratio)
             frame = cv2.resize(frame, (width, height))
 
-            cv2.imwrite(output_path, frame)
+            # Write thumbnail
+            success = cv2.imwrite(output_path, frame)
+            if not success:
+                logging.error(f"Failed to write thumbnail to: {output_path}")
+                return False
+
+            logging.info(f"Successfully generated thumbnail: {output_path}")
             success = True
         else:
+            logging.error(f"Failed to read frame from video: {video_path}")
             success = False
 
         cap.release()

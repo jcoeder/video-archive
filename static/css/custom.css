@@ -41,6 +41,18 @@
     color: var(--bs-navbar-hover-color);
 }
 
+/* Toast notifications */
+.toast {
+    z-index: 1050;
+}
+
+.toast-container {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    z-index: 1050;
+}
+
 /* Video card and preview styles */
 .video-card {
     transition: transform 0.2s;
