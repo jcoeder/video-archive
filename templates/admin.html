@@ -112,7 +112,7 @@
     </div>
 </div>
 
-<!-- Delete User Modals - Moved outside main content -->
+<!-- Delete User Modals -->
 {% for user in users %}
 {% if user.username != 'admin' %}
 <div class="modal fade" id="deleteUserModal{{ user.id }}" tabindex="-1" aria-labelledby="deleteUserModalLabel{{ user.id }}" aria-hidden="true">
@@ -123,72 +123,18 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p>What would you like to do with {{ user.username }}'s content?</p>
-                <form id="deleteUserForm{{ user.id }}" action="{{ url_for('delete_user', user_id=user.id) }}" method="POST">
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="radio" name="content_action" value="delete" 
-                               id="deleteContent{{ user.id }}" checked>
-                        <label class="form-check-label" for="deleteContent{{ user.id }}">
-                            Delete all content
-                        </label>
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="radio" name="content_action" value="transfer" 
-                               id="transferContent{{ user.id }}">
-                        <label class="form-check-label" for="transferContent{{ user.id }}">
-                            Transfer content to another user
-                        </label>
-                    </div>
-                    <div class="mb-3 transfer-select" id="transferSelect{{ user.id }}" style="display: none;">
-                        <label class="form-label">Transfer to user:</label>
-                        <select class="form-select" name="transfer_user_id">
-                            {% for other_user in users %}
-                                {% if other_user.id != user.id %}
-                                <option value="{{ other_user.id }}">
-                                    {{ other_user.username }}
-                                </option>
-                                {% endif %}
-                            {% endfor %}
-                        </select>
-                    </div>
-                </form>
+                <p>Are you sure you want to delete this user? This action cannot be undone.</p>
+                <p class="text-danger">Warning: All user content including videos and categories will be permanently deleted.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" form="deleteUserForm{{ user.id }}" class="btn btn-danger">
-                    Confirm Delete
-                </button>
+                <form action="{{ url_for('delete_user', user_id=user.id) }}" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">Delete User</button>
+                </form>
             </div>
         </div>
     </div>
 </div>
 {% endif %}
 {% endfor %}
-
-{% endblock %}
-
-{% block extra_js %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    {% for user in users %}
-    if (document.getElementById('transferContent{{ user.id }}')) {
-        const transferContent = document.getElementById('transferContent{{ user.id }}');
-        const deleteContent = document.getElementById('deleteContent{{ user.id }}');
-        const transferSelect = document.getElementById('transferSelect{{ user.id }}');
-
-        transferContent.addEventListener('change', function() {
-            if (this.checked) {
-                transferSelect.style.display = 'block';
-            }
-        });
-
-        deleteContent.addEventListener('change', function() {
-            if (this.checked) {
-                transferSelect.style.display = 'none';
-            }
-        });
-    }
-    {% endfor %}
-});
-</script>
 {% endblock %}

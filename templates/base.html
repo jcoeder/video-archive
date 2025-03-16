@@ -26,9 +26,10 @@
                             </a>
                             <div class="dropdown-divider"></div>
                         {% endif %}
-                        <a class="dropdown-item" href="{{ url_for('change_password') }}">
-                            <i class="bi bi-key"></i> Change Password
+                        <a class="dropdown-item" href="{{ url_for('account_management') }}">
+                            <i class="bi bi-person-gear"></i> Account Management
                         </a>
+                        <div class="dropdown-divider"></div>
                         <a class="dropdown-item" href="{{ url_for('logout') }}">
                             <i class="bi bi-box-arrow-right"></i> Logout
                         </a>

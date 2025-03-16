@@ -6,7 +6,7 @@ from datetime import datetime
 import cv2
 import threading
 import time
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.utils import secure_filename
@@ -644,7 +644,7 @@ def delete_user(user_id):
         flash('Access denied. Admin privileges required.', 'danger')
         return redirect(url_for('admin'))
 
-    from models import User, Video, Category
+    from models import User
     user = User.query.get_or_404(user_id)
 
     if user.username == 'admin':
@@ -652,158 +652,15 @@ def delete_user(user_id):
         return redirect(url_for('admin'))
 
     try:
-        # Get user's storage paths before deletion
+        # Get user's storage paths
         user_upload_folder = os.path.join('static/uploads', user.get_storage_path())
         user_thumbnail_folder = os.path.join('static/thumbnails', user.get_storage_path())
 
-        content_action = request.form.get('content_action')
-        if content_action == 'transfer':
-            transfer_user_id = request.form.get('transfer_user_id')
-            if transfer_user_id:
-                transfer_user = User.query.get(transfer_user_id)
-                if transfer_user:
-                    try:
-                        # Get existing categories for transfer user
-                        existing_categories = {cat.name.lower(): cat for cat in transfer_user.categories}
-
-                        # First, transfer all videos to new user
-                        videos_to_transfer = Video.query.filter_by(user_id=user.id).all()
-                        for video in videos_to_transfer:
-                            # Store video categories before transfer
-                            video_categories = list(video.categories)
-
-                            # Clear existing category relationships
-                            video.categories = []
-
-                            # Update video ownership and paths
-                            video.user_id = transfer_user.id
-
-                            # Get old and new paths for all file types
-                            old_web_path = os.path.join('static', video.file_path)
-                            new_web_path = os.path.join('static', video.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path()))
-
-                            # Handle original file paths
-                            filename = os.path.basename(video.file_path)
-                            if filename.startswith('web_'):
-                                original_filename = f"original_{filename[4:]}"  # Remove 'web_' prefix
-                            else:
-                                original_filename = f"original_{filename}"
-
-                            old_original_path = os.path.join('static/uploads', user.get_storage_path(), original_filename)
-                            new_original_path = os.path.join('static/uploads', transfer_user.get_storage_path(), original_filename)
-
-                            # Update thumbnail paths
-                            if video.thumbnail_path:
-                                old_thumb_path = os.path.join('static', video.thumbnail_path)
-                                new_thumb_path = os.path.join('static', video.thumbnail_path.replace(user.get_storage_path(), transfer_user.get_storage_path()))
-                                video.thumbnail_path = video.thumbnail_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
-
-                            # Update video file path
-                            video.file_path = video.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
-                            db.session.add(video)
-
-                            # Process categories for this video
-                            for old_category in video_categories:
-                                transfer_category = existing_categories.get(old_category.name.lower())
-                                if not transfer_category:
-                                    # Create new category for transfer user
-                                    transfer_category = Category(
-                                        name=old_category.name,
-                                        user_id=transfer_user.id
-                                    )
-                                    db.session.add(transfer_category)
-                                    existing_categories[transfer_category.name.lower()] = transfer_category
-
-                                # Add video to transfer category
-                                if video not in transfer_category.videos:
-                                    transfer_category.videos.append(video)
-
-                        # Commit changes to ensure video transfers are saved
-                        db.session.commit()
-
-                        # Move files after successful database update
-                        import shutil
-                        for video in videos_to_transfer:
-                            # Get all possible file paths
-                            old_web_path = os.path.join('static', video.file_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
-                            new_web_path = os.path.join('static', video.file_path)
-
-                            filename = os.path.basename(video.file_path)
-                            if filename.startswith('web_'):
-                                original_filename = f"original_{filename[4:]}"
-                            else:
-                                original_filename = f"original_{filename}"
-
-                            old_original_path = os.path.join('static/uploads', user.get_storage_path(), original_filename)
-                            new_original_path = os.path.join('static/uploads', transfer_user.get_storage_path(), original_filename)
-
-                            # Thumbnail
-                            old_thumb_path = None
-                            new_thumb_path = None
-                            if video.thumbnail_path:
-                                old_thumb_path = os.path.join('static', video.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
-                                new_thumb_path = os.path.join('static', video.thumbnail_path)
-
-
-                            # Copy web version
-                            if os.path.exists(old_web_path):
-                                os.makedirs(os.path.dirname(new_web_path), exist_ok=True)
-                                shutil.copy2(old_web_path, new_web_path)
-                                logging.info(f"Copied web version: {old_web_path} -> {new_web_path}")
-
-                            # Copy original version
-                            if os.path.exists(old_original_path):
-                                os.makedirs(os.path.dirname(new_original_path), exist_ok=True)
-                                shutil.copy2(old_original_path, new_original_path)
-                                logging.info(f"Copied original version: {old_original_path} -> {new_original_path}")
-
-                            # Copy thumbnail
-                            if old_thumb_path and os.path.exists(old_thumb_path):
-                                os.makedirs(os.path.dirname(new_thumb_path), exist_ok=True)
-                                shutil.copy2(old_thumb_path, new_thumb_path)
-                                logging.info(f"Copied thumbnail: {old_thumb_path} -> {new_thumb_path}")
-
-                        # After successful copy, remove old files
-                        try:
-                            for video in videos_to_transfer:
-                                # Web version
-                                old_web_path = os.path.join('static', video.file_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
-                                if os.path.exists(old_web_path):
-                                    os.remove(old_web_path)
-                                    logging.info(f"Removed old web version: {old_web_path}")
-
-                                # Original version
-                                filename = os.path.basename(video.file_path)
-                                if filename.startswith('web_'):
-                                    original_filename = f"original_{filename[4:]}"
-                                else:
-                                    original_filename = f"original_{filename}"
-                                old_original_path = os.path.join('static/uploads', user.get_storage_path(), original_filename)
-                                if os.path.exists(old_original_path):
-                                    os.remove(old_original_path)
-                                    logging.info(f"Removed old original version: {old_original_path}")
-
-                                # Thumbnail
-                                if video.thumbnail_path:
-                                    old_thumb_path = os.path.join('static', video.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
-                                    if os.path.exists(old_thumb_path):
-                                        os.remove(old_thumb_path)
-                                        logging.info(f"Removed old thumbnail: {old_thumb_path}")
-
-                        except Exception as e:
-                            logging.error(f"Error removing old files: {str(e)}")
-                            # Continue execution even if cleanup fails
-
-                    except Exception as e:
-                        db.session.rollback()
-                        raise e
-
-        else:  # Delete content
-            # Delete all content if not transferring
-            for video in user.videos:
-                db.session.delete(video)
-            for category in user.categories:
-                db.session.delete(category)
+        # Delete all user's videos and categories
+        for video in user.videos:
+            db.session.delete(video)
+        for category in user.categories:
+            db.session.delete(category)
 
         # Delete the user's folders
         try:
@@ -815,22 +672,65 @@ def delete_user(user_id):
         except Exception as e:
             logging.error(f"Error deleting user folders: {str(e)}")
 
-        # Finally delete the user and their categories
-        # Delete categories first to avoid foreign key constraints
-        for category in Category.query.filter_by(user_id=user.id).all():
-            db.session.delete(category)
+        # Delete the user
         db.session.delete(user)
         db.session.commit()
         flash(f'User {user.username} deleted successfully!', 'success')
 
     except Exception as e:
-        logger.error(f"Error deleting user: {str(e)}")
         db.session.rollback()
-        flash(f'Error deleting user: {str(e)}', 'danger')
+        logger.error(f"Error deleting user: {str(e)}")
+        flash('Error deleting user', 'danger')
 
     return redirect(url_for('admin'))
 
-@app.route('/admin/user/delete/<int:user_id>', methods=['POST'])
+@app.route('/account_management')
+@login_required
+def account_management():
+    form = ChangePasswordForm()
+    return render_template('account_management.html', form=form)
+
+@app.route('/download_content')
+@login_required
+def download_content():
+    import os
+    import zipfile
+    from io import BytesIO
+    from datetime import datetime
+
+    # Create a BytesIO object to store the zip file
+    memory_file = BytesIO()
+
+    # Create the zip file
+    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        user_upload_folder = get_user_upload_folder(current_user)
+
+        # Walk through the user's upload directory
+        for root, dirs, files in os.walk(user_upload_folder):
+            for file in files:
+                # Only include original files
+                if file.startswith('original_'):
+                    file_path = os.path.join(root, file)
+                    # Add file to zip without the full path structure
+                    arcname = os.path.basename(file_path)
+                    try:
+                        zf.write(file_path, arcname)
+                    except Exception as e:
+                        logging.error(f"Error adding file to zip: {str(e)}")
+                        continue
+
+    # Reset the file pointer
+    memory_file.seek(0)
+
+    # Generate the response
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    return send_file(
+        memory_file,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'video_archive_{timestamp}.zip'
+    )
+
 @app.errorhandler(500)
 def internal_error(error):
     logger.error(f"Internal Server Error: {str(error)}")
