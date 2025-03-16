@@ -432,14 +432,25 @@ def upload_video():
 def video_detail(video_id):
     from models import Video, Category
     video = Video.query.get_or_404(video_id)
-    categories = Category.query.filter_by(user_id=current_user.id).order_by(Category.name).all()
+
+    # Ensure user owns the video or is admin
+    if video.user_id != current_user.id and not current_user.is_admin:
+        flash('Access denied.', 'danger')
+        return redirect(url_for('index'))
+
+    # Only show categories belonging to the video owner
+    categories = Category.query.filter_by(user_id=video.user_id).order_by(Category.name).all()
 
     if request.method == 'POST':
+        if video.user_id != current_user.id and not current_user.is_admin:
+            flash('Access denied.', 'danger')
+            return redirect(url_for('index'))
+
         video.notes = request.form.get('notes', '')
         video.categories = []
         for category_id in request.form.getlist('categories'):
             category = Category.query.get(category_id)
-            if category and category.user_id == current_user.id:
+            if category and category.user_id == video.user_id:
                 video.categories.append(category)
         db.session.commit()
         if request.headers.get('Content-Type') == 'application/x-www-form-urlencoded':
