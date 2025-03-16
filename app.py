@@ -591,6 +591,15 @@ def add_category():
     name = request.form.get('category_name')
     if name:
         try:
+            # Check if category already exists for this user
+            existing = Category.query.filter_by(name=name, user_id=current_user.id).first()
+            if existing:
+                return jsonify({
+                    'success': True,
+                    'category': {'id': existing.id, 'name': existing.name}
+                })
+
+            # Create new category
             category = Category(name=name, user_id=current_user.id)
             db.session.add(category)
             db.session.commit()

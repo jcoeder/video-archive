@@ -49,7 +49,17 @@
         <div class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title">Categories</h5>
-                <form action="{{ url_for('video_detail', video_id=video.id) }}" method="post">
+                <!-- Category Form -->
+                <form id="categoryForm" class="mb-3">
+                    <div class="input-group">
+                        <input type="text" class="form-control" name="category_name" required
+                               placeholder="Category name">
+                        <button class="btn btn-outline-secondary" type="submit">Add</button>
+                    </div>
+                </form>
+
+                <!-- Video Details Form -->
+                <form action="{{ url_for('video_detail', video_id=video.id) }}" method="post" id="videoDetailsForm">
                     <div class="mb-3">
                         <div id="categoriesContainer">
                             {% for category in categories|sort(attribute='name') %}
@@ -63,11 +73,6 @@
                             </div>
                             {% endfor %}
                         </div>
-                    </div>
-                    <div class="input-group mb-3">
-                        <input type="text" class="form-control" name="category_name" required
-                               placeholder="Category name">
-                        <button class="btn btn-outline-secondary" type="submit">Add</button>
                     </div>
                     <div class="mb-3">
                         <label for="notes" class="form-label">Notes</label>
@@ -86,6 +91,58 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+    $(document).ready(function() {
+        const categoryForm = document.getElementById('categoryForm');
+        if (categoryForm) {
+            categoryForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const categoryInput = categoryForm.querySelector('input[name="category_name"]');
+                const categoryName = categoryInput.value;
+
+                fetch('/category/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `category_name=${encodeURIComponent(categoryName)}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Add new checkbox to the categories container
+                        const categoriesContainer = document.getElementById('categoriesContainer');
+                        const newCategory = document.createElement('div');
+                        newCategory.className = 'form-check';
+                        newCategory.innerHTML = `
+                            <input class="form-check-input" type="checkbox" name="categories" 
+                                   value="${data.category.id}" id="category${data.category.id}" checked>
+                            <label class="form-check-label" for="category${data.category.id}">
+                                ${data.category.name}
+                            </label>
+                        `;
+
+                        // Insert the new category in alphabetical order
+                        const categories = Array.from(categoriesContainer.children);
+                        const insertIndex = categories.findIndex(cat => {
+                            const label = cat.querySelector('label');
+                            return label && label.textContent.trim().localeCompare(data.category.name) > 0;
+                        });
+
+                        if (insertIndex === -1) {
+                            categoriesContainer.appendChild(newCategory);
+                        } else {
+                            categoriesContainer.insertBefore(newCategory, categories[insertIndex]);
+                        }
+
+                        categoryInput.value = ''; // Clear input
+                        categoryInput.focus(); // Keep focus on input field
+                    }
+                });
+            });
+        }
+    });
+</script>
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
