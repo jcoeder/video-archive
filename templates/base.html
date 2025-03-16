@@ -50,6 +50,23 @@
             {% endif %}
         {% endwith %}
 
+        {% if current_user.is_authenticated %}
+        <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <a class="nav-link {% if request.endpoint == 'index' and not request.args.get('tab') == 'upload' %}active{% endif %}" 
+                   href="{{ url_for('index') }}">
+                    <i class="bi bi-collection-play"></i> Video Library
+                </a>
+            </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link {% if request.args.get('tab') == 'upload' %}active{% endif %}" 
+                   href="{{ url_for('index', tab='upload') }}">
+                    <i class="bi bi-upload"></i> Upload Video
+                </a>
+            </li>
+        </ul>
+        {% endif %}
+
         {% block content %}{% endblock %}
     </div>
 

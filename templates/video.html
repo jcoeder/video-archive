@@ -46,21 +46,31 @@
     </div>
 
     <div class="col-lg-4">
-        <div class="card">
+        <div class="card mb-4">
             <div class="card-body">
-                <h5 class="card-title">Edit Details</h5>
+                <h5 class="card-title">Categories</h5>
                 <form action="{{ url_for('video_detail', video_id=video.id) }}" method="post">
                     <div class="mb-3">
-                        <label class="form-label">Categories</label>
-                        <select class="form-select" name="categories" multiple data-bs-toggle="select2">
+                        <div id="categoriesContainer">
                             {% for category in categories %}
-                            <option value="{{ category.id }}" 
-                                    {% if category in video.categories %}selected{% endif %}>
-                                {{ category.name }}
-                            </option>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="categories" 
+                                       value="{{ category.id }}" id="category{{ category.id }}"
+                                       {% if category in video.categories %}checked{% endif %}>
+                                <label class="form-check-label" for="category{{ category.id }}">
+                                    {{ category.name }}
+                                </label>
+                            </div>
                             {% endfor %}
-                        </select>
+                        </div>
                     </div>
+                    <form id="categoryForm">
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" name="category_name" required
+                                   placeholder="Category name">
+                            <button class="btn btn-outline-secondary" type="submit">Add</button>
+                        </div>
+                    </form>
                     <div class="mb-3">
                         <label for="notes" class="form-label">Notes</label>
                         <textarea class="form-control" id="notes" name="notes" 
