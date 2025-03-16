@@ -67,7 +67,12 @@
 }
 
 .dropzone .dz-remove-container {
-    margin: 1rem 0;
+    margin-bottom: 10px;
+}
+
+.dropzone .dz-upload-status {
+    padding-top: 10px;
+    border-top: 1px solid var(--bs-gray-700);
 }
 
 .dropzone .dz-progress {
