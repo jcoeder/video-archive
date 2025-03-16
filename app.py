@@ -1,6 +1,7 @@
 import os
 import logging
 import subprocess
+import hashlib
 from datetime import datetime
 import cv2
 import threading
@@ -14,6 +15,24 @@ import urllib.parse
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from forms import LoginForm, RegisterForm, ChangePasswordForm, AdminUserCreateForm  # Added AdminUserCreateForm import
 
+
+def calculate_file_hash(file_path):
+    """Calculate SHA-256 hash of a file"""
+    try:
+        sha256_hash = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            # Read the file in chunks to handle large files
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
+    except Exception as e:
+        logging.error(f"Error calculating file hash: {str(e)}")
+        return None
+
+def check_duplicate_video(file_hash, user_id):
+    """Check if a video with the same hash exists for the user"""
+    from models import Video
+    return Video.query.filter_by(file_hash=file_hash, user_id=user_id).first()
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -341,7 +360,21 @@ def upload_video():
                 os.makedirs(os.path.dirname(original_filepath), exist_ok=True)
                 file.save(original_filepath)
 
-                # Transcode to web-compatible format
+                # Calculate file hash
+                file_hash = calculate_file_hash(original_filepath)
+                if file_hash:
+                    # Check for duplicates
+                    duplicate = check_duplicate_video(file_hash, current_user.id)
+                    if duplicate:
+                        # Clean up the uploaded file
+                        try:
+                            os.remove(original_filepath)
+                        except Exception as e:
+                            logging.error(f"Error removing duplicate file: {str(e)}")
+                        flash('This video has already been uploaded.', 'warning')
+                        return redirect(url_for('video_detail', video_id=duplicate.id))
+
+                # Continue with transcoding if no duplicate found
                 final_filename = f"web_{original_filename.rsplit('.', 1)[0]}.mp4"
                 final_filepath = os.path.join(user_upload_folder, final_filename)
 
@@ -357,7 +390,8 @@ def upload_video():
                             thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",
                             notes=notes,
                             date_archived=datetime.now(),
-                            user_id=current_user.id
+                            user_id=current_user.id,
+                            file_hash=file_hash
                         )
 
                         # Add categories
@@ -397,6 +431,21 @@ def upload_video():
                 os.makedirs(os.path.dirname(original_filepath), exist_ok=True)
                 stream.download(filename=original_filepath)
 
+                # Calculate file hash
+                file_hash = calculate_file_hash(original_filepath)
+                if file_hash:
+                    # Check for duplicates
+                    duplicate = check_duplicate_video(file_hash, current_user.id)
+                    if duplicate:
+                        # Clean up the uploaded file
+                        try:
+                            os.remove(original_filepath)
+                        except Exception as e:
+                            logging.error(f"Error removing duplicate file: {str(e)}")
+                        flash('This video has already been uploaded.', 'warning')
+                        return redirect(url_for('video_detail', video_id=duplicate.id))
+
+
                 # Transcode YouTube video
                 final_filename = f"web_{original_filename}"
                 final_filepath = os.path.join(user_upload_folder, final_filename)
@@ -413,7 +462,8 @@ def upload_video():
                             thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",
                             notes=notes,
                             date_archived=datetime.now(),
-                            user_id=current_user.id
+                            user_id=current_user.id,
+                            file_hash=file_hash
                         )
 
                         # Add categories

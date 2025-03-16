@@ -15,7 +15,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256))
     is_admin = db.Column(db.Boolean, default=False)
     categories = db.relationship('Category', backref='user', lazy=True)
-    videos = db.relationship('Video', backref='user', lazy=True)  # Added videos relationship
+    videos = db.relationship('Video', backref='user', lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -31,6 +31,7 @@ class Video(db.Model):
     notes = db.Column(db.Text)
     date_archived = db.Column(db.DateTime, default=datetime.utcnow)
     exists = db.Column(db.Boolean, default=True)  # Track if video file exists
+    file_hash = db.Column(db.String(64))  # Store SHA-256 hash of file
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     categories = db.relationship('Category', secondary=video_categories, lazy='subquery',
         backref=db.backref('videos', lazy=True))
