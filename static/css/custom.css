@@ -42,6 +42,10 @@
     color: var(--bs-primary);
 }
 
+.dropzone .dz-remove-container {
+    margin: 10px 0;
+}
+
 .dropzone .dz-progress {
     height: 4px;
     background: var(--bs-gray-700) !important;
