@@ -1,24 +1,36 @@
-/* Minimal custom styles to complement Bootstrap */
-
 /* Navbar and dropdown styles */
 .navbar .dropdown-menu {
     position: absolute;
     z-index: 1000;
-    margin-top: 0;
+    margin-top: 8px;
     border: 1px solid var(--bs-border-color);
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-    min-width: 200px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    min-width: 240px;
+    padding: 8px 0;
+    background-color: var(--bs-dark);
 }
 
 .navbar .dropdown-menu-end {
     right: 0;
     left: auto;
-    text-align: right;
 }
 
 .navbar .dropdown-item {
-    padding: 0.5rem 1rem;
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--bs-body-color);
     transition: background-color 0.2s;
+}
+
+.navbar .dropdown-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.navbar .dropdown-divider {
+    margin: 8px 0;
+    border-top: 1px solid var(--bs-border-color);
 }
 
 .navbar .dropdown-item i {
