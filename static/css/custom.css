@@ -1,3 +1,109 @@
+/* Dropzone styling */
+.dropzone-container {
+    background: var(--bs-dark);
+    border-radius: 0.375rem;
+    padding: 1rem;
+}
+
+.dropzone {
+    background: var(--bs-dark);
+    border: 2px dashed var(--bs-gray);
+    border-radius: 5px;
+    min-height: 200px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.3s ease;
+}
+
+.dropzone:hover {
+    border-color: var(--bs-primary);
+}
+
+.dropzone .dz-message {
+    text-align: center;
+    margin: 2em 0;
+    color: var(--bs-gray-500);
+}
+
+.dropzone .dz-preview {
+    background: var(--bs-gray-800);
+    border-radius: 4px;
+    padding: 10px;
+    margin: 10px;
+    position: relative;
+}
+
+.dropzone .dz-preview .dz-image {
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bs-gray-700);
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dropzone .dz-preview .dz-details {
+    color: var(--bs-gray-300);
+    padding: 10px 0;
+}
+
+.dropzone .dz-preview .dz-progress {
+    background: var(--bs-gray-700);
+    height: 10px;
+    border-radius: 5px;
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    top: 50%;
+    margin-top: -5px;
+}
+
+.dropzone .dz-preview .dz-progress .dz-upload {
+    background: var(--bs-primary);
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.3s ease;
+}
+
+.dropzone .dz-preview .dz-success-mark,
+.dropzone .dz-preview .dz-error-mark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: none;
+    color: var(--bs-success);
+    font-size: 24px;
+}
+
+.dropzone .dz-preview .dz-error-mark {
+    color: var(--bs-danger);
+}
+
+.dropzone .dz-preview.dz-success .dz-success-mark {
+    display: block;
+}
+
+.dropzone .dz-preview.dz-error .dz-error-mark {
+    display: block;
+}
+
+.dropzone .dz-preview .dz-error-message {
+    color: var(--bs-danger);
+    font-size: 0.875rem;
+    margin-top: 5px;
+    display: none;
+}
+
+.dropzone .dz-preview.dz-error .dz-error-message {
+    display: block;
+}
+
 /* Navbar and dropdown styles */
 .navbar .dropdown-menu {
     position: absolute;

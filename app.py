@@ -23,14 +23,16 @@ db = SQLAlchemy(model_class=Base)
 app = Flask(__name__)
 dropzone = Dropzone(app)
 
-# Configure Dropzone settings
-app.config['DROPZONE_ALLOWED_FILE_TYPES'] = ['video']
+# Update Dropzone configuration
+app.config['DROPZONE_ALLOWED_FILE_TYPES'] = 'video'
 app.config['DROPZONE_MAX_FILE_SIZE'] = 500  # MB
 app.config['DROPZONE_UPLOAD_MULTIPLE'] = True
-app.config['DROPZONE_PARALLEL_UPLOADS'] = 1
-app.config['DROPZONE_UPLOAD_ON_CLICK'] = False
+app.config['DROPZONE_PARALLEL_UPLOADS'] = 10
+app.config['DROPZONE_UPLOAD_ON_CLICK'] = True
 app.config['DROPZONE_IN_FORM'] = True
-app.config['DROPZONE_UPLOAD_ACTION'] = 'upload_video'
+app.config['DROPZONE_UPLOAD_ACTION'] = 'upload_video'  # URL endpoint
+app.config['DROPZONE_DEFAULT_MESSAGE'] = "Drop video files here or click to upload"
+app.config['DROPZONE_TIMEOUT'] = 300000  # 5 minutes in milliseconds
 
 app.secret_key = os.environ.get("SESSION_SECRET") or "dev-secret-key-change-in-production"
 

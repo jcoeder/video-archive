@@ -64,14 +64,16 @@
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title mb-4">Upload Videos</h5>
-                        <form id="uploadForm" action="{{ url_for('upload_video') }}" method="post" class="dropzone">
-                            {{ form.csrf_token }}
-                            <div class="dz-message" data-dz-message>
-                                <i class="bi bi-cloud-upload display-4"></i>
-                                <p class="mt-3">Drop video files here or click to upload</p>
-                                <p class="text-muted small">Supported formats: MP4, AVI, MOV, MKV, WEBM</p>
-                            </div>
-                        </form>
+                        <div class="dropzone-container mb-4">
+                            <form id="uploadForm" action="{{ url_for('upload_video') }}" method="post" class="dropzone">
+                                {{ form.csrf_token }}
+                                <div class="dz-message" data-dz-message>
+                                    <i class="bi bi-cloud-upload display-4"></i>
+                                    <p class="mt-3">Drop video files here or click to upload</p>
+                                    <p class="text-muted small">Supported formats: MP4, AVI, MOV, MKV, WEBM</p>
+                                </div>
+                            </form>
+                        </div>
 
                         <hr class="my-4">
 
@@ -149,15 +151,33 @@
 <script>
 Dropzone.autoDiscover = false;
 
-// Initialize Dropzone
+// Initialize Dropzone with dark theme styles
 const myDropzone = new Dropzone("#uploadForm", {
     url: "{{ url_for('upload_video') }}",
     autoProcessQueue: false,
     uploadMultiple: true,
-    parallelUploads: 1,
+    parallelUploads: 10,
     maxFilesize: 500,
     acceptedFiles: ".mp4,.avi,.mov,.mkv,.webm",
-    addRemoveLinks: true
+    addRemoveLinks: true,
+    dictDefaultMessage: "Drop files here or click to upload",
+    previewTemplate: `
+        <div class="dz-preview dz-file-preview">
+            <div class="dz-image">
+                <img data-dz-thumbnail />
+            </div>
+            <div class="dz-details">
+                <div class="dz-filename"><span data-dz-name></span></div>
+                <div class="dz-size" data-dz-size></div>
+            </div>
+            <div class="dz-progress">
+                <span class="dz-upload" data-dz-uploadprogress></span>
+            </div>
+            <div class="dz-success-mark"><span>✔</span></div>
+            <div class="dz-error-mark"><span>✘</span></div>
+            <div class="dz-error-message"><span data-dz-errormessage></span></div>
+        </div>
+    `
 });
 
 function processUploads() {
@@ -166,52 +186,104 @@ function processUploads() {
     const categories = Array.from(document.querySelectorAll('input[name="categories"]:checked'))
         .map(cb => cb.value);
 
+    const uploadButton = document.getElementById('uploadButton');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const uploadStatus = document.getElementById('uploadStatus');
+
     // Process YouTube URL if provided
     if (youtubeUrl) {
-        uploadYouTubeVideo(youtubeUrl, notes, categories);
+        uploadButton.disabled = true;
+        loadingSpinner.classList.remove('d-none');
+        uploadStatus.classList.remove('d-none');
+
+        const formData = new FormData();
+        formData.append('youtube_url', youtubeUrl);
+        formData.append('notes', notes);
+        categories.forEach(cat => formData.append('categories', cat));
+
+        fetch("{{ url_for('upload_video') }}", {
+            method: 'POST',
+            body: formData
+        }).then(response => {
+            if (response.ok) {
+                window.location.href = response.url;
+            } else {
+                throw new Error('YouTube processing failed');
+            }
+        }).catch(error => {
+            uploadButton.disabled = false;
+            loadingSpinner.classList.add('d-none');
+            uploadStatus.classList.add('d-none');
+            alert('Processing failed. Please try again.');
+        });
     }
 
     // Process Dropzone files
     if (myDropzone.files.length > 0) {
+        uploadButton.disabled = true;
+        loadingSpinner.classList.remove('d-none');
+
+        // Add metadata to all files
+        myDropzone.files.forEach(file => {
+            file.formData = {
+                notes: notes,
+                categories: categories
+            };
+        });
+
         myDropzone.on('sending', function(file, xhr, formData) {
-            formData.append('notes', notes);
-            categories.forEach(cat => formData.append('categories', cat));
+            // Append metadata to each file upload
+            formData.append('notes', file.formData.notes);
+            file.formData.categories.forEach(cat => formData.append('categories', cat));
         });
 
         myDropzone.processQueue();
     }
 }
 
-function uploadYouTubeVideo(url, notes, categories) {
-    const formData = new FormData();
-    formData.append('youtube_url', url);
-    formData.append('notes', notes);
-    categories.forEach(cat => formData.append('categories', cat));
-
-    const uploadButton = document.getElementById('uploadButton');
-    const loadingSpinner = document.getElementById('loadingSpinner');
-    const uploadStatus = document.getElementById('uploadStatus');
-
-    uploadButton.disabled = true;
-    loadingSpinner.classList.remove('d-none');
-    uploadStatus.classList.remove('d-none');
-
-    fetch("{{ url_for('upload_video') }}", {
-        method: 'POST',
-        body: formData
-    }).then(response => {
-        if (response.ok) {
-            window.location.href = response.url;
-        } else {
-            throw new Error('YouTube processing failed');
+// Add custom styling to Dropzone
+document.addEventListener('DOMContentLoaded', function() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .dropzone {
+            background: var(--bs-dark);
+            border: 2px dashed var(--bs-gray);
+            border-radius: 5px;
+            min-height: 200px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
         }
-    }).catch(error => {
-        uploadButton.disabled = false;
-        loadingSpinner.classList.add('d-none');
-        uploadStatus.classList.add('d-none');
-        alert('Processing failed. Please try again.');
-    });
-}
+        .dropzone .dz-message {
+            text-align: center;
+            margin: 2em 0;
+            color: var(--bs-gray-500);
+        }
+        .dropzone .dz-preview {
+            background: var(--bs-gray-800);
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px;
+        }
+        .dropzone .dz-preview .dz-image {
+            border-radius: 4px;
+            overflow: hidden;
+            background: var(--bs-gray-700);
+        }
+        .dropzone .dz-preview .dz-details {
+            color: var(--bs-gray-300);
+        }
+        .dropzone .dz-preview .dz-progress {
+            background: var(--bs-gray-700);
+        }
+        .dropzone .dz-preview .dz-progress .dz-upload {
+            background: var(--bs-primary);
+        }
+    `;
+    document.head.appendChild(style);
+});
 
 // Dropzone event handlers
 myDropzone.on('success', function(file, response) {
@@ -222,6 +294,40 @@ myDropzone.on('success', function(file, response) {
 
 myDropzone.on('error', function(file, errorMessage) {
     alert('Upload failed. Please try again.');
+});
+
+// Category form handling
+document.getElementById('categoryForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const categoryInput = this.querySelector('input[name="category_name"]');
+    const categoryName = categoryInput.value;
+
+    fetch('/category/add', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `category_name=${encodeURIComponent(categoryName)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Add new checkbox to categories
+            const categoriesContainer = document.getElementById('categoriesContainer');
+            const newCategory = document.createElement('div');
+            newCategory.className = 'form-check';
+            newCategory.innerHTML = `
+                <input class="form-check-input" type="checkbox" name="categories" 
+                       value="${data.category.id}" id="category${data.category.id}" checked>
+                <label class="form-check-label" for="category${data.category.id}">
+                    ${data.category.name}
+                </label>
+            `;
+            categoriesContainer.appendChild(newCategory);
+            categoryInput.value = '';
+            categoryInput.focus();
+        }
+    });
 });
 </script>
 {% endblock %}
