@@ -25,21 +25,89 @@ videoCards.forEach(card => {
     }
 });
 
-// Show loading state during video upload
+// Show loading state and progress during video upload
 document.addEventListener('DOMContentLoaded', function() {
     const uploadForm = document.getElementById('uploadForm');
     const uploadButton = document.getElementById('uploadButton');
     const loadingSpinner = document.getElementById('loadingSpinner');
+    const progressBar = document.getElementById('uploadProgress');
+    const progressBarInner = progressBar.querySelector('.progress-bar');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const videoInput = document.getElementById('video');
+    const youtubeUrlInput = document.getElementById('youtubeUrl');
 
     if (uploadForm) {
-        uploadForm.addEventListener('submit', function() {
-            uploadButton.disabled = true;
-            loadingSpinner.classList.remove('d-none');
+        uploadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+
+            // Check if it's a file upload or YouTube URL
+            if (videoInput.files.length > 0) {
+                // Show progress bar for file uploads
+                progressBar.classList.remove('d-none');
+                uploadButton.disabled = true;
+                loadingSpinner.classList.remove('d-none');
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', uploadForm.action, true);
+
+                xhr.upload.onprogress = function(e) {
+                    if (e.lengthComputable) {
+                        const percentComplete = (e.loaded / e.total) * 100;
+                        progressBarInner.style.width = percentComplete + '%';
+                        progressBarInner.textContent = Math.round(percentComplete) + '%';
+                        progressBarInner.setAttribute('aria-valuenow', percentComplete);
+                    }
+                };
+
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        // Upload complete, now processing
+                        progressBar.classList.add('d-none');
+                        uploadStatus.classList.remove('d-none');
+                        window.location.href = xhr.responseURL || '/';
+                    } else {
+                        uploadButton.disabled = false;
+                        loadingSpinner.classList.add('d-none');
+                        progressBar.classList.add('d-none');
+                        alert('Upload failed. Please try again.');
+                    }
+                };
+
+                xhr.onerror = function() {
+                    uploadButton.disabled = false;
+                    loadingSpinner.classList.add('d-none');
+                    progressBar.classList.add('d-none');
+                    alert('Upload failed. Please try again.');
+                };
+
+                xhr.send(formData);
+            } else if (youtubeUrlInput.value) {
+                // For YouTube URLs, show processing status
+                uploadButton.disabled = true;
+                loadingSpinner.classList.remove('d-none');
+                uploadStatus.classList.remove('d-none');
+
+                fetch(uploadForm.action, {
+                    method: 'POST',
+                    body: formData
+                }).then(response => {
+                    if (response.ok) {
+                        window.location.href = response.url;
+                    } else {
+                        throw new Error('YouTube processing failed');
+                    }
+                }).catch(error => {
+                    uploadButton.disabled = false;
+                    loadingSpinner.classList.add('d-none');
+                    uploadStatus.classList.add('d-none');
+                    alert('Processing failed. Please try again.');
+                });
+            }
         });
     }
 
     // YouTube URL validation
-    const youtubeUrlInput = document.getElementById('youtubeUrl');
     if (youtubeUrlInput) {
         youtubeUrlInput.addEventListener('input', function() {
             const url = this.value;
