@@ -652,6 +652,67 @@ def delete_user(user_id):
         return redirect(url_for('admin'))
 
     try:
+        # Get user's storage paths before deletion
+        user_upload_folder = os.path.join('static/uploads', user.get_storage_path())
+        user_thumbnail_folder = os.path.join('static/thumbnails', user.get_storage_path())
+
+        content_action = request.form.get('content_action')
+        if content_action == 'transfer':
+            transfer_user_id = request.form.get('transfer_user_id')
+            if transfer_user_id:
+                transfer_user = User.query.get(transfer_user_id)
+                if transfer_user:
+                    # Transfer videos to new user
+                    for video in user.videos:
+                        # Update video ownership
+                        video.user_id = transfer_user.id
+
+                        # Move video files to new user's folders
+                        old_file_path = video.file_path
+                        old_thumb_path = video.thumbnail_path
+
+                        # Update paths to use new user's UUID
+                        video.file_path = video.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
+                        if video.thumbnail_path:
+                            video.thumbnail_path = video.thumbnail_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
+
+                        # Move files
+                        try:
+                            if os.path.exists(os.path.join('static', old_file_path)):
+                                os.makedirs(os.path.dirname(os.path.join('static', video.file_path)), exist_ok=True)
+                                import shutil
+                                shutil.move(os.path.join('static', old_file_path), 
+                                          os.path.join('static', video.file_path))
+
+                            if old_thumb_path and os.path.exists(os.path.join('static', old_thumb_path)):
+                                os.makedirs(os.path.dirname(os.path.join('static', video.thumbnail_path)), exist_ok=True)
+                                shutil.move(os.path.join('static', old_thumb_path),
+                                          os.path.join('static', video.thumbnail_path))
+                        except Exception as e:
+                            logging.error(f"Error moving files for video {video.id}: {str(e)}")
+
+                    # Transfer categories
+                    for category in user.categories:
+                        category.user_id = transfer_user.id
+
+        # Delete user's folders regardless of transfer status
+        # (if transferred, folders should be empty now)
+        try:
+            import shutil
+            if os.path.exists(user_upload_folder):
+                shutil.rmtree(user_upload_folder)
+            if os.path.exists(user_thumbnail_folder):
+                shutil.rmtree(user_thumbnail_folder)
+        except Exception as e:
+            logging.error(f"Error deleting user folders: {str(e)}")
+
+        if content_action != 'transfer':
+            # Delete all user's content if not transferring
+            for video in user.videos:
+                db.session.delete(video)
+            for category in user.categories:
+                db.session.delete(category)
+
         db.session.delete(user)
         db.session.commit()
         flash(f'User {user.username} deleted successfully!', 'success')

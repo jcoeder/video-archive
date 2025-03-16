@@ -83,6 +83,63 @@
                                         {% if user.is_admin %}Remove Admin{% else %}Make Admin{% endif %}
                                     </button>
                                 </form>
+                                <button type="button" class="btn btn-danger btn-sm" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#deleteUserModal{{ user.id }}">
+                                    Delete User
+                                </button>
+                                <!-- Delete User Modal -->
+                                <div class="modal fade" id="deleteUserModal{{ user.id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Delete User: {{ user.username }}</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p>What would you like to do with {{ user.username }}'s content?</p>
+                                                <form id="deleteUserForm{{ user.id }}" 
+                                                      action="{{ url_for('delete_user', user_id=user.id) }}" 
+                                                      method="POST">
+                                                    <div class="form-check mb-3">
+                                                        <input class="form-check-input" type="radio" 
+                                                               name="content_action" value="delete" 
+                                                               id="deleteContent{{ user.id }}" checked>
+                                                        <label class="form-check-label" for="deleteContent{{ user.id }}">
+                                                            Delete all content
+                                                        </label>
+                                                    </div>
+                                                    <div class="form-check mb-3">
+                                                        <input class="form-check-input" type="radio" 
+                                                               name="content_action" value="transfer" 
+                                                               id="transferContent{{ user.id }}">
+                                                        <label class="form-check-label" for="transferContent{{ user.id }}">
+                                                            Transfer content to another user
+                                                        </label>
+                                                    </div>
+                                                    <div class="mb-3" id="transferSelect{{ user.id }}" style="display: none;">
+                                                        <label class="form-label">Transfer to user:</label>
+                                                        <select class="form-select" name="transfer_user_id">
+                                                            {% for other_user in users %}
+                                                                {% if other_user.id != user.id %}
+                                                                <option value="{{ other_user.id }}">
+                                                                    {{ other_user.username }}
+                                                                </option>
+                                                                {% endif %}
+                                                            {% endfor %}
+                                                        </select>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" form="deleteUserForm{{ user.id }}" class="btn btn-danger">
+                                                    Confirm Delete
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 {% endif %}
                             </td>
                         </tr>
@@ -93,4 +150,22 @@
         </div>
     </div>
 </div>
+
+<!-- JavaScript for handling transfer select visibility -->
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    {% for user in users %}
+        if (document.getElementById('transferContent{{ user.id }}')) {
+            document.getElementById('transferContent{{ user.id }}').addEventListener('change', function() {
+                document.getElementById('transferSelect{{ user.id }}').style.display = 'block';
+            });
+            document.getElementById('deleteContent{{ user.id }}').addEventListener('change', function() {
+                document.getElementById('transferSelect{{ user.id }}').style.display = 'none';
+            });
+        }
+    {% endfor %}
+});
+</script>
+{% endblock %}
 {% endblock %}
