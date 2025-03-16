@@ -44,10 +44,20 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 }
 db.init_app(app)
 
-# Initialize Flask-Login
+# Initialize Flask-Login with updated session protection
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+login_manager.session_protection = None  # Allow multiple concurrent sessions
+
+# Configure session handling
+app.config['SESSION_PROTECTION'] = None  # Disable Flask session protection
+
+@login_manager.user_loader
+def load_user(id):
+    from models import User
+    return User.query.get(int(id))
+
 
 # Configure upload settings
 UPLOAD_FOLDER = 'static/uploads'
@@ -75,11 +85,6 @@ for folder in [UPLOAD_FOLDER, THUMBNAIL_FOLDER]:
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['THUMBNAIL_FOLDER'] = THUMBNAIL_FOLDER
-
-@login_manager.user_loader
-def load_user(id):
-    from models import User
-    return User.query.get(int(id))
 
 
 def transcode_video(input_path, output_path):
@@ -188,7 +193,8 @@ def login():
                 flash('Invalid username or password', 'danger')
                 return redirect(url_for('login'))
 
-            login_user(user)
+            # Remove remember=True to avoid persistent sessions interfering with multiple logins
+            login_user(user, remember=False)
             return redirect(url_for('index'))
 
         return render_template('login.html', form=form)
