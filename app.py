@@ -737,55 +737,58 @@ def delete_user(user_id):
                             old_original_path = os.path.join('static/uploads', user.get_storage_path(), original_filename)
                             new_original_path = os.path.join('static/uploads', transfer_user.get_storage_path(), original_filename)
 
-                            # Move web version
+                            # Thumbnail
+                            old_thumb_path = None
+                            new_thumb_path = None
+                            if video.thumbnail_path:
+                                old_thumb_path = os.path.join('static', video.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
+                                new_thumb_path = os.path.join('static', video.thumbnail_path)
+
+
+                            # Copy web version
                             if os.path.exists(old_web_path):
                                 os.makedirs(os.path.dirname(new_web_path), exist_ok=True)
                                 shutil.copy2(old_web_path, new_web_path)
                                 logging.info(f"Copied web version: {old_web_path} -> {new_web_path}")
 
-                            # Move original version
+                            # Copy original version
                             if os.path.exists(old_original_path):
                                 os.makedirs(os.path.dirname(new_original_path), exist_ok=True)
                                 shutil.copy2(old_original_path, new_original_path)
                                 logging.info(f"Copied original version: {old_original_path} -> {new_original_path}")
 
-                            # Handle thumbnail
-                            if video.thumbnail_path:
-                                old_thumb = os.path.join('static', video.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
-                                new_thumb = os.path.join('static', video.thumbnail_path)
-                                if os.path.exists(old_thumb):
-                                    os.makedirs(os.path.dirname(new_thumb), exist_ok=True)
-                                    shutil.copy2(old_thumb, new_thumb)
-                                    logging.info(f"Copied thumbnail: {old_thumb} -> {new_thumb}")
+                            # Copy thumbnail
+                            if old_thumb_path and os.path.exists(old_thumb_path):
+                                os.makedirs(os.path.dirname(new_thumb_path), exist_ok=True)
+                                shutil.copy2(old_thumb_path, new_thumb_path)
+                                logging.info(f"Copied thumbnail: {old_thumb_path} -> {new_thumb_path}")
 
                         # After successful copy, remove old files
                         try:
                             for video in videos_to_transfer:
-                                # Get old paths based on user's storage path
+                                # Web version
                                 old_web_path = os.path.join('static', video.file_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
-
-                                filename = os.path.basename(video.file_path)
-                                if filename.startswith('web_'):                                    original_filename = f"original_{filename[4:]}"
-                                else:
-                                    original_filename = f"original_{filename}"
-                                old_original_path = os.path.join('static/uploads', user.get_storage_path(), original_filename)
-
-                                old_thumb = None
-                                if video.thumbnail_path:
-                                    old_thumb = os.path.join('static', video.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
-
-                                # Remove old files after successful transfer
                                 if os.path.exists(old_web_path):
                                     os.remove(old_web_path)
                                     logging.info(f"Removed old web version: {old_web_path}")
 
+                                # Original version
+                                filename = os.path.basename(video.file_path)
+                                if filename.startswith('web_'):
+                                    original_filename = f"original_{filename[4:]}"
+                                else:
+                                    original_filename = f"original_{filename}"
+                                old_original_path = os.path.join('static/uploads', user.get_storage_path(), original_filename)
                                 if os.path.exists(old_original_path):
                                     os.remove(old_original_path)
                                     logging.info(f"Removed old original version: {old_original_path}")
 
-                                if old_thumb and os.path.exists(old_thumb):
-                                    os.remove(old_thumb)
-                                    logging.info(f"Removed old thumbnail: {old_thumb}")
+                                # Thumbnail
+                                if video.thumbnail_path:
+                                    old_thumb_path = os.path.join('static', video.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
+                                    if os.path.exists(old_thumb_path):
+                                        os.remove(old_thumb_path)
+                                        logging.info(f"Removed old thumbnail: {old_thumb_path}")
 
                         except Exception as e:
                             logging.error(f"Error removing old files: {str(e)}")
