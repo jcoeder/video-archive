@@ -566,14 +566,21 @@ def toggle_admin(user_id):
         flash('Access denied. Admin privileges required.', 'danger')
         return redirect(url_for('admin'))
 
-    from models import User
-    user = User.query.get_or_404(user_id)
-    if user.username == 'admin':
-        flash('Cannot modify admin status of default admin user.', 'danger')
-    else:
-        user.is_admin = not user.is_admin
-        db.session.commit()
-        flash(f"Admin status {'granted to' if user.is_admin else 'removed from'} {user.username}", 'success')
+    try:
+        from models import User
+        user = User.query.get_or_404(user_id)
+
+        if user.username == 'admin':
+            flash('Cannot modify admin status of default admin user.', 'danger')
+        else:
+            user.is_admin = not user.is_admin
+            db.session.commit()
+            flash(f"Admin status {'granted to' if user.is_admin else 'removed from'} {user.username}", 'success')
+    except Exception as e:
+        logger.error(f"Error toggling admin status: {str(e)}")
+        db.session.rollback()
+        flash('Error updating admin status', 'danger')
+
     return redirect(url_for('admin'))
 
 @app.route('/change_password', methods=['GET', 'POST'])

@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, EmailField
+from wtforms import StringField, PasswordField, SubmitField, EmailField, BooleanField
 from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional
 
 class LoginForm(FlaskForm):
@@ -17,7 +17,7 @@ class AdminUserCreateForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=4, max=64)])
     email = EmailField('Email', validators=[Optional(), Email()])
     password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
-    is_admin = SubmitField('Make Admin')
+    is_admin = BooleanField('Make Admin')  # Changed from SubmitField to BooleanField
     submit = SubmitField('Create User')
 
 class ChangePasswordForm(FlaskForm):
