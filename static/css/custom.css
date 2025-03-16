@@ -3,13 +3,10 @@
     background: var(--bs-dark) !important;
     border: 2px dashed var(--bs-gray-600);
     border-radius: 8px;
-    min-height: 300px;
     padding: 2rem;
     cursor: pointer;
     transition: all 0.3s ease;
     position: relative;
-    overflow-y: auto;
-    max-height: 600px;
 }
 
 .dropzone:hover,
@@ -66,6 +63,7 @@
     justify-content: center;
     z-index: 0;
     pointer-events: none;
+    min-height: 300px;
 }
 
 .dropzone.dz-started .dz-message {
@@ -108,9 +106,8 @@
     color: var(--bs-primary);
 }
 
-
-/* Upload progress styles moved outside dropzone */
-#upload-progress-container {
+/* Upload progress styles outside dropzone */
+#overall-upload-status {
     margin-top: 1rem;
     padding: 1rem;
     background: var(--bs-dark);
