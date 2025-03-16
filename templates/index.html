@@ -67,7 +67,7 @@
                         <div class="dropzone-container mb-4">
                             <form id="uploadForm" action="{{ url_for('upload_video') }}" method="post" class="dropzone">
                                 {{ form.csrf_token }}
-                                <div class="dz-message">
+                                <div class="dz-default dz-message">
                                     <div class="upload-message">
                                         <div class="upload-icon mb-3">
                                             <i class="bi bi-cloud-arrow-up display-1"></i>
@@ -193,6 +193,18 @@ const myDropzone = new Dropzone("#uploadForm", {
 
             formData.append('notes', notes);
             categories.forEach(cat => formData.append('categories', cat));
+        });
+
+        this.on("removedfile", function(file) {
+            if (this.files.length === 0) {
+                // Show the upload message when all files are removed
+                const message = document.querySelector('.dz-default.dz-message');
+                if (message) {
+                    message.style.display = 'flex';
+                }
+                // Reset the dropzone display to flex for proper centering
+                this.element.style.display = 'flex';
+            }
         });
     }
 });
