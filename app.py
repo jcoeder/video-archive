@@ -263,72 +263,48 @@ def upload_video():
         if 'youtube_url' in request.form:
             url = request.form['youtube_url']
             try:
-                # Basic options
+                # Setup paths
                 timestamp = int(time.time())
                 user_upload_folder = get_user_upload_folder(current_user)
                 temp_filepath = os.path.join(user_upload_folder, f"download_{timestamp}.mp4")
 
-                # Configure yt-dlp options
+                logging.info(f"Processing YouTube URL: {url}")
+
+                # Basic configuration for yt-dlp
                 ydl_opts = {
-                    'format': 'best',  # Get best quality
+                    'format': 'mp4',  # Simplest format selection
                     'outtmpl': temp_filepath,
-                    'quiet': True,
-                    'no_warnings': True,
-                    'extract_flat': False
+                    'quiet': False,
+                    'verbose': True
                 }
 
-                # Download and get info in a single step
+                logging.info("Starting download process...")
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     try:
-                        # Get video info and download
-                        logging.info(f"Downloading video from URL: {url}")
-                        info = ydl.extract_info(url, download=True)
+                        # Extract info and download in one step
+                        info_dict = ydl.extract_info(url)
 
-                        # Log the full info structure for debugging
-                        logging.debug(f"Full video info: {info}")
+                        if not info_dict:
+                            raise ValueError("Failed to extract video information")
 
-                        if not isinstance(info, dict):
-                            logging.error(f"Expected dict but got {type(info)}")
-                            flash('Error processing video information', 'error')
-                            return redirect(url_for('index'))
+                        # Get the video title
+                        title = info_dict.get('title', '')
+                        if not title:
+                            title = f'video_{timestamp}'
 
-                        # Get video title
-                        video_title = info.get('title', '')
-                        if not video_title:
-                            video_title = f'video_{timestamp}'
+                        logging.info(f"Downloaded video with title: {title}")
+                        video_title = secure_filename(title)
 
-                        logging.info(f"Video title: {video_title}")
-
-                        # Check if download was successful
+                        # Check if file was downloaded
                         if not os.path.exists(temp_filepath):
-                            logging.error("Download failed - file not found")
-                            flash('Error downloading video', 'error')
-                            return redirect(url_for('index'))
+                            raise FileNotFoundError("Download completed but file not found")
+
+                        # Move file to final location
+                        original_filepath = os.path.join(user_upload_folder, f"original_{video_title}.mp4")
+                        os.rename(temp_filepath, original_filepath)
 
                         # Process the downloaded file
-                        original_filename = secure_filename(f"{video_title}.mp4")
-                        original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
-
-                        # Rename downloaded file
-                        try:
-                            os.rename(temp_filepath, original_filepath)
-                        except Exception as e:
-                            logging.error(f"Error renaming file: {str(e)}")
-                            cleanup_files([temp_filepath])
-                            flash('Error processing video', 'error')
-                            return redirect(url_for('index'))
-
-                        # Calculate hash and check duplicates
-                        file_hash = calculate_file_hash(original_filepath)
-                        if file_hash:
-                            duplicate = check_duplicate_video(file_hash, current_user.id)
-                            if duplicate:
-                                cleanup_files([original_filepath])
-                                flash('This video has already been uploaded.', 'warning')
-                                return redirect(url_for('video_detail', video_id=duplicate.id))
-
-                        # Create web version
-                        web_filename = f"web_{original_filename}"
+                        web_filename = f"web_{video_title}.mp4"
                         web_filepath = os.path.join(user_upload_folder, web_filename)
 
                         if transcode_video(original_filepath, web_filepath):
@@ -337,15 +313,13 @@ def upload_video():
                             thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
 
                             if generate_thumbnail(web_filepath, thumbnail_path):
-                                # Create video entry
                                 video = Video(
                                     title=video_title,
                                     file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",
                                     thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
                                     notes=notes,
                                     date_archived=datetime.now(),
-                                    user_id=current_user.id,
-                                    file_hash=file_hash
+                                    user_id=current_user.id
                                 )
 
                                 # Add categories
@@ -364,21 +338,18 @@ def upload_video():
                         else:
                             cleanup_files([original_filepath])
                             flash('Error processing video', 'error')
-                        return redirect(url_for('index'))
 
                     except Exception as e:
-                        logging.error(f"Error during download/processing: {str(e)}")
-                        logging.error(f"Exception type: {type(e).__name__}", exc_info=True)
+                        logging.error(f"Error during download process: {str(e)}")
+                        logging.error(f"Error type: {type(e).__name__}", exc_info=True)
+                        cleanup_files([temp_filepath])
                         flash('Error processing video', 'error')
                         return redirect(url_for('index'))
 
-            except yt_dlp.utils.DownloadError as e:
-                logging.error(f"YouTube download error: {str(e)}")
-                flash('Could not download the video. Please check the URL and try again.', 'error')
             except Exception as e:
-                logging.error(f"Unexpected error: {str(e)}")
-                logging.error(f"Exception type: {type(e).__name__}", exc_info=True)
+                logging.error(f"Error: {str(e)}")
                 flash('An unexpected error occurred', 'error')
+
             return redirect(url_for('index'))
 
         elif request.files:
