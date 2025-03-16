@@ -1,10 +1,61 @@
 /* Minimal custom styles to complement Bootstrap */
+
+/* Video card and preview styles */
+.video-card {
+    transition: transform 0.2s;
+    position: relative;
+    overflow: visible;
+}
+
+.video-card:hover {
+    transform: translateY(-2px);
+}
+
 .video-thumbnail {
     width: 100%;
     height: 200px;
     object-fit: cover;
     background-color: var(--bs-dark);
+    position: relative;
 }
+
+.video-preview {
+    display: none;
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}
+
+/* Card content should always be visible */
+.card-body {
+    position: relative;
+    z-index: 2;
+    background: var(--bs-dark);
+}
+
+/* Missing video overlay */
+.missing-video-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 200px;
+    background-color: rgba(var(--bs-danger-rgb), 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+}
+
+.missing-video-overlay i {
+    font-size: 4rem;
+    color: white;
+}
+
 
 .loading-overlay {
     position: fixed;
@@ -24,17 +75,7 @@
     margin-bottom: 0.25rem;
 }
 
-.video-card {
-    transition: transform 0.2s;
-    position: relative;
-    overflow: hidden;
-}
-
-.video-card:hover {
-    transform: translateY(-2px);
-}
-
-/* Add smooth fade transition for alerts */
+/* Alert animations */
 .alert {
     transition: opacity 1s ease-out;
 }
@@ -60,16 +101,16 @@ video {
     margin: 0 auto;
 }
 
-/* Video preview styles */
-.video-preview {
-    display: none;
-    width: 100%;
-    height: 200px;
-    object-fit: cover;
-    position: absolute;
-    top: 0;
-    left: 0;
-    transition: opacity 0.3s ease;
+/* Ensure proper spacing for video controls */
+video::-webkit-media-controls {
+    background-color: var(--bs-dark);
+}
+
+/* Responsive video container */
+@media (max-width: 768px) {
+    video {
+        max-height: 50vh;
+    }
 }
 
 /* Tab styles */
@@ -92,34 +133,4 @@ video {
     color: var(--bs-primary);
     background-color: transparent;
     border-bottom: 2px solid var(--bs-primary);
-}
-
-/* Ensure proper spacing for video controls */
-video::-webkit-media-controls {
-    background-color: var(--bs-dark);
-}
-
-/* Responsive video container */
-@media (max-width: 768px) {
-    video {
-        max-height: 50vh;
-    }
-}
-
-.missing-video-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 200px;
-    background-color: rgba(var(--bs-danger-rgb), 0.8);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 2;
-}
-
-.missing-video-overlay i {
-    font-size: 4rem;
-    color: white;
 }

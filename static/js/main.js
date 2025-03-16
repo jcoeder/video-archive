@@ -1,3 +1,30 @@
+// Video preview on hover
+const videoCards = document.querySelectorAll('.video-card');
+videoCards.forEach(card => {
+    const previewVideo = card.querySelector('.video-preview');
+    const thumbnail = card.querySelector('.video-thumbnail');
+
+    if (previewVideo && thumbnail) {
+        let timeoutId;
+
+        thumbnail.addEventListener('mouseenter', () => {
+            timeoutId = setTimeout(() => {
+                thumbnail.style.display = 'none';
+                previewVideo.style.display = 'block';
+                previewVideo.play().catch(e => console.log('Preview autoplay prevented'));
+            }, 500); // Start preview after 500ms hover
+        });
+
+        thumbnail.addEventListener('mouseleave', () => {
+            clearTimeout(timeoutId);
+            previewVideo.style.display = 'none';
+            thumbnail.style.display = 'block';
+            previewVideo.pause();
+            previewVideo.currentTime = 0;
+        });
+    }
+});
+
 // Show loading state during video upload
 document.addEventListener('DOMContentLoaded', function() {
     const uploadForm = document.getElementById('uploadForm');
@@ -57,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     categoriesContainer.appendChild(newCategory);
                     categoryInput.value = ''; // Clear input
 
-                    // Show success message that disappears after 4 seconds with 1s fade
+                    // Show success message
                     const alert = document.createElement('div');
                     alert.className = 'alert alert-success alert-dismissible fade show';
                     alert.innerHTML = `
@@ -67,10 +94,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     categoryForm.insertAdjacentElement('beforebegin', alert);
                     setTimeout(() => {
                         alert.classList.add('removing');
-                        setTimeout(() => alert.remove(), 1000); // Remove after 1s fade
+                        setTimeout(() => alert.remove(), 1000);
                     }, 4000);
                 } else {
-                    // Show error message that disappears after 4 seconds with 1s fade
+                    // Show error message
                     const alert = document.createElement('div');
                     alert.className = 'alert alert-danger alert-dismissible fade show';
                     alert.innerHTML = `
@@ -80,39 +107,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     categoryForm.insertAdjacentElement('beforebegin', alert);
                     setTimeout(() => {
                         alert.classList.add('removing');
-                        setTimeout(() => alert.remove(), 1000); // Remove after 1s fade
+                        setTimeout(() => alert.remove(), 1000);
                     }, 4000);
                 }
             });
         });
     }
-
-    // Video preview on hover
-    const videoCards = document.querySelectorAll('.video-card');
-    videoCards.forEach(card => {
-        const previewVideo = card.querySelector('.video-preview');
-        const thumbnail = card.querySelector('.video-thumbnail');
-
-        if (previewVideo && thumbnail) {
-            let timeoutId;
-
-            card.addEventListener('mouseenter', () => {
-                timeoutId = setTimeout(() => {
-                    thumbnail.style.display = 'none';
-                    previewVideo.style.display = 'block';
-                    previewVideo.play().catch(e => console.log('Preview autoplay prevented'));
-                }, 500); // Start preview after 500ms hover
-            });
-
-            card.addEventListener('mouseleave', () => {
-                clearTimeout(timeoutId);
-                previewVideo.style.display = 'none';
-                thumbnail.style.display = 'block';
-                previewVideo.pause();
-                previewVideo.currentTime = 0;
-            });
-        }
-    });
 
     // Initialize tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))

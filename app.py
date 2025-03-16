@@ -444,7 +444,7 @@ def delete_video(video_id):
     video = Video.query.get_or_404(video_id)
 
     # Ensure user owns the video or is admin
-    if not current_user.is_admin and video.user_id != current_user.id:
+    if video.user_id != current_user.id and not current_user.is_admin:
         flash('Access denied.', 'danger')
         return redirect(url_for('index'))
 
