@@ -84,22 +84,30 @@ document.addEventListener('DOMContentLoaded', function() {
                     categoriesContainer.appendChild(newCategory);
                     categoryInput.value = ''; // Clear input
 
-                    // Show success toast
-                    const toast = new bootstrap.Toast(document.createElement('div'));
-                    toast.element.className = 'toast align-items-center text-bg-success border-0 position-fixed bottom-0 end-0 m-3';
-                    toast.element.innerHTML = `
+                    // Show success notification
+                    const toastDiv = document.createElement('div');
+                    toastDiv.className = 'toast align-items-center text-bg-success border-0 position-fixed bottom-0 end-0 m-3';
+                    toastDiv.setAttribute('role', 'alert');
+                    toastDiv.setAttribute('aria-live', 'assertive');
+                    toastDiv.setAttribute('aria-atomic', 'true');
+                    toastDiv.innerHTML = `
                         <div class="d-flex">
                             <div class="toast-body">
                                 Category added
                             </div>
                         </div>
                     `;
-                    document.body.appendChild(toast.element);
+                    document.body.appendChild(toastDiv);
+
+                    const toast = new bootstrap.Toast(toastDiv, {
+                        delay: 3000, // Auto-hide after 3 seconds
+                        animation: true
+                    });
                     toast.show();
 
-                    // Remove toast after it's hidden
-                    toast.element.addEventListener('hidden.bs.toast', () => {
-                        toast.element.remove();
+                    // Remove toast element after it's hidden
+                    toastDiv.addEventListener('hidden.bs.toast', () => {
+                        toastDiv.remove();
                     });
                 }
             });
