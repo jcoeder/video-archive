@@ -87,6 +87,11 @@
     padding: 1rem;
     position: relative;
     z-index: 1;
+    pointer-events: none; /* Make preview container non-blocking for clicks */
+}
+
+.dropzone .dz-preview-files * {
+    pointer-events: auto; /* Re-enable pointer events for preview items */
 }
 
 .dz-filename {
