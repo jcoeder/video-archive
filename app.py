@@ -689,18 +689,29 @@ def sync_video_files():
                     os.makedirs(os.path.dirname(original_file), exist_ok=True)
                     import shutil
                     shutil.copy2(web_file, original_file)
-                    logging.info(f"Successfully restored original file: {original_file}")
+                    # Update the original file path in case web_ prefix was removed
+                    logging.info(f"Successfully restored original file from web version: {original_file}")
                 except Exception as e:
                     logging.error(f"Error copying web to original for video {video.id}: {str(e)}")
 
             # Handle missing thumbnail
             if not thumbnail_file or not os.path.exists(thumbnail_file):
+                source_file = None
+                # Try web version first, then original
                 if os.path.exists(web_file):
+                    source_file = web_file
+                    logging.info(f"Using web version to generate thumbnail for video {video.id}")
+                elif os.path.exists(original_file):
+                    source_file = original_file
+                    logging.info(f"Using original version to generate thumbnail for video {video.id}")
+
+                if source_file:
                     logging.info(f"Generating missing thumbnail for video {video.id}")
                     thumbnail_filename = f"video_{video.id}_{int(time.time())}_thumb.jpg"
                     thumbnail_path = os.path.join(user_thumbnail_folder, thumbnail_filename)
-                    if generate_thumbnail(web_file, thumbnail_path):
+                    if generate_thumbnail(source_file, thumbnail_path):
                         video.thumbnail_path = f"thumbnails/{video.user_id}/{thumbnail_filename}"
+                        logging.info(f"Successfully generated thumbnail: {thumbnail_path}")
                     else:
                         logging.error(f"Failed to generate thumbnail for video {video.id}")
 
