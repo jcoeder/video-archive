@@ -78,16 +78,30 @@
                             <td>{{ user.videos|length }}</td>
                             <td>
                                 {% if user.username != 'admin' %}
-                                <form action="{{ url_for('toggle_admin', user_id=user.id) }}" method="POST" style="display: inline;">
-                                    <button type="submit" class="btn btn-sm {% if user.is_admin %}btn-warning{% else %}btn-success{% endif %}">
-                                        {% if user.is_admin %}Remove Admin{% else %}Make Admin{% endif %}
+                                <div class="dropdown">
+                                    <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" 
+                                            data-bs-toggle="dropdown" aria-expanded="false">
+                                        Actions
                                     </button>
-                                </form>
-                                <button type="button" class="btn btn-danger btn-sm" 
-                                        data-bs-toggle="modal" 
-                                        data-bs-target="#deleteUserModal{{ user.id }}">
-                                    Delete User
-                                </button>
+                                    <ul class="dropdown-menu">
+                                        <li>
+                                            <form action="{{ url_for('toggle_admin', user_id=user.id) }}" 
+                                                  method="POST" style="display: inline;">
+                                                <button type="submit" class="dropdown-item">
+                                                    {% if user.is_admin %}Remove Admin{% else %}Make Admin{% endif %}
+                                                </button>
+                                            </form>
+                                        </li>
+                                        <li>
+                                            <button type="button" class="dropdown-item text-danger" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#deleteUserModal{{ user.id }}">
+                                                Delete User
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
+
                                 <!-- Delete User Modal -->
                                 <div class="modal fade" id="deleteUserModal{{ user.id }}" tabindex="-1">
                                     <div class="modal-dialog">
