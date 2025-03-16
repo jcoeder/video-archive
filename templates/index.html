@@ -99,13 +99,15 @@
                             <label for="notes" class="form-label">Notes</label>
                             <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
                         </div>
-
                         <button type="button" class="btn btn-primary" id="uploadButton" onclick="processUploads()">
                             Upload Videos
                             <span class="spinner-border spinner-border-sm d-none" id="loadingSpinner" role="status">
                                 <span class="visually-hidden">Loading...</span>
                             </span>
                         </button>
+                        <div class="mt-4">  <!--Added div for spacing and status placement-->
+                            <div id="upload-status"></div>  <!--Added div to display upload status-->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -140,7 +142,7 @@ const myDropzone = new Dropzone("#uploadForm", {
     parallelUploads: 10,
     maxFilesize: 500,
     acceptedFiles: ".mp4,.avi,.mov,.mkv,.webm",
-    addRemoveLinks: true,
+    addRemoveLinks: false,
     createImageThumbnails: false,
     previewTemplate: `
         <div class="dz-preview">
@@ -174,7 +176,6 @@ const myDropzone = new Dropzone("#uploadForm", {
             <p class="text-muted">Supported formats: MP4, AVI, MOV, MKV, WEBM</p>
         </div>
     `
-
 });
 
 function processUploads() {
@@ -185,10 +186,13 @@ function processUploads() {
 
     const uploadButton = document.getElementById('uploadButton');
     const loadingSpinner = document.getElementById('loadingSpinner');
+    const uploadStatus = document.getElementById('upload-status'); // Get the upload status element
+
 
     if (youtubeUrl) {
         uploadButton.disabled = true;
         loadingSpinner.classList.remove('d-none');
+        uploadStatus.innerHTML = 'Processing YouTube video...'; // Update status
 
         const formData = new FormData();
         formData.append('youtube_url', youtubeUrl);
@@ -207,6 +211,7 @@ function processUploads() {
         }).catch(error => {
             uploadButton.disabled = false;
             loadingSpinner.classList.add('d-none');
+            uploadStatus.innerHTML = 'YouTube processing failed.'; // Update status
             alert('Processing failed. Please try again.');
         });
     }
@@ -214,6 +219,7 @@ function processUploads() {
     if (myDropzone.files.length > 0) {
         uploadButton.disabled = true;
         loadingSpinner.classList.remove('d-none');
+        uploadStatus.innerHTML = 'Uploading files...'; // Update status
 
         myDropzone.files.forEach(file => {
             file.formData = {
@@ -239,6 +245,8 @@ myDropzone.on('success', function(file, response) {
 });
 
 myDropzone.on('error', function(file, errorMessage) {
+    const uploadStatus = document.getElementById('upload-status'); // Get upload status element
+    uploadStatus.innerHTML = 'Upload failed. Please try again.'; // Update status
     alert('Upload failed. Please try again.');
 });
 
