@@ -11,8 +11,8 @@
 <body>
     <nav class="navbar navbar-dark bg-dark">
         <div class="container d-flex justify-content-between align-items-center">
-            <a class="navbar-brand" href="{{ url_for('home') }}">
-                <i class="bi bi-collection-play"></i> Content Archive
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="bi bi-collection-play"></i> Video Archive
             </a>
             {% if current_user.is_authenticated %}
                 <div class="dropdown">
@@ -50,28 +50,22 @@
             {% endif %}
         {% endwith %}
 
+        {% if current_user.is_authenticated %}
         <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <a class="nav-link {% if request.endpoint == 'home' %}active{% endif %}" 
-                   href="{{ url_for('home') }}">
-                    <i class="bi bi-globe"></i> Published Content
-                </a>
-            </li>
-            {% if current_user.is_authenticated %}
-            <li class="nav-item" role="presentation">
-                <a class="nav-link {% if request.endpoint == 'my_library' and not request.args.get('tab') == 'upload' %}active{% endif %}" 
-                   href="{{ url_for('my_library') }}">
-                    <i class="bi bi-collection-play"></i> My Content Library
+                <a class="nav-link {% if request.endpoint == 'index' and not request.args.get('tab') == 'upload' %}active{% endif %}" 
+                   href="{{ url_for('index') }}">
+                    <i class="bi bi-collection-play"></i> Video Library
                 </a>
             </li>
             <li class="nav-item" role="presentation">
                 <a class="nav-link {% if request.args.get('tab') == 'upload' %}active{% endif %}" 
-                   href="{{ url_for('my_library', tab='upload') }}">
-                    <i class="bi bi-upload"></i> Upload Content
+                   href="{{ url_for('index', tab='upload') }}">
+                    <i class="bi bi-upload"></i> Upload Video
                 </a>
             </li>
-            {% endif %}
         </ul>
+        {% endif %}
 
         {% block content %}{% endblock %}
     </div>
