@@ -740,56 +740,56 @@ def delete_user(user_id):
                             # Move web version
                             if os.path.exists(old_web_path):
                                 os.makedirs(os.path.dirname(new_web_path), exist_ok=True)
-                                shutil.move(old_web_path, new_web_path)
-                                logging.info(f"Moved web version: {old_web_path} -> {new_web_path}")
+                                shutil.copy2(old_web_path, new_web_path)
+                                logging.info(f"Copied web version: {old_web_path} -> {new_web_path}")
 
                             # Move original version
                             if os.path.exists(old_original_path):
                                 os.makedirs(os.path.dirname(new_original_path), exist_ok=True)
-                                shutil.move(old_original_path, new_original_path)
-                                logging.info(f"Moved original version: {old_original_path} -> {new_original_path}")
+                                shutil.copy2(old_original_path, new_original_path)
+                                logging.info(f"Copied original version: {old_original_path} -> {new_original_path}")
 
                             # Handle thumbnail
                             if video.thumbnail_path:
                                 old_thumb = os.path.join('static', video.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
                                 new_thumb = os.path.join('static', video.thumbnail_path)
-
-                                # Try to move existing thumbnail
-                                thumbnail_transferred = False
                                 if os.path.exists(old_thumb):
-                                    try:
-                                        os.makedirs(os.path.dirname(new_thumb), exist_ok=True)
-                                        shutil.move(old_thumb, new_thumb)
-                                        thumbnail_transferred = True
-                                        logging.info(f"Moved thumbnail: {old_thumb} -> {new_thumb}")
-                                    except Exception as e:
-                                        logging.error(f"Error moving thumbnail: {str(e)}")
+                                    os.makedirs(os.path.dirname(new_thumb), exist_ok=True)
+                                    shutil.copy2(old_thumb, new_thumb)
+                                    logging.info(f"Copied thumbnail: {old_thumb} -> {new_thumb}")
 
-                                # If thumbnail wasn't transferred, try to regenerate it
-                                if not thumbnail_transferred and os.path.exists(new_web_path):
-                                    try:
-                                        # Generate new thumbnail
-                                        thumbnail_filename = f"video_{int(time.time())}_thumb.jpg"
-                                        new_thumb_path = os.path.join(get_user_thumbnail_folder(transfer_user), thumbnail_filename)
+                        # After successful copy, remove old files
+                        try:
+                            for video in videos_to_transfer:
+                                # Get old paths based on user's storage path
+                                old_web_path = os.path.join('static', video.file_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
 
-                                        if generate_thumbnail(new_web_path, new_thumb_path):
-                                            # Update video record with new thumbnail path
-                                            video.thumbnail_path = f"thumbnails/{transfer_user.get_storage_path()}/{thumbnail_filename}"
-                                            db.session.add(video)
-                                            db.session.commit()
-                                            logging.info(f"Generated new thumbnail for transferred video: {new_thumb_path}")
-                                        else:
-                                            logging.error(f"Failed to generate new thumbnail for video {video.id}")
-                                            # If generation fails, set thumbnail path to None
-                                            video.thumbnail_path = None
-                                            db.session.add(video)
-                                            db.session.commit()
-                                    except Exception as e:
-                                        logging.error(f"Error generating new thumbnail: {str(e)}")
-                                        # If exception occurs, set thumbnail path to None
-                                        video.thumbnail_path = None
-                                        db.session.add(video)
-                                        db.session.commit()
+                                filename = os.path.basename(video.file_path)
+                                if filename.startswith('web_'):                                    original_filename = f"original_{filename[4:]}"
+                                else:
+                                    original_filename = f"original_{filename}"
+                                old_original_path = os.path.join('static/uploads', user.get_storage_path(), original_filename)
+
+                                old_thumb = None
+                                if video.thumbnail_path:
+                                    old_thumb = os.path.join('static', video.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
+
+                                # Remove old files after successful transfer
+                                if os.path.exists(old_web_path):
+                                    os.remove(old_web_path)
+                                    logging.info(f"Removed old web version: {old_web_path}")
+
+                                if os.path.exists(old_original_path):
+                                    os.remove(old_original_path)
+                                    logging.info(f"Removed old original version: {old_original_path}")
+
+                                if old_thumb and os.path.exists(old_thumb):
+                                    os.remove(old_thumb)
+                                    logging.info(f"Removed old thumbnail: {old_thumb}")
+
+                        except Exception as e:
+                            logging.error(f"Error removing old files: {str(e)}")
+                            # Continue execution even if cleanup fails
 
                     except Exception as e:
                         db.session.rollback()
@@ -827,6 +827,7 @@ def delete_user(user_id):
 
     return redirect(url_for('admin'))
 
+@app.route('/admin/user/delete/<int:user_id>', methods=['POST'])
 @app.errorhandler(500)
 def internal_error(error):
     logger.error(f"Internal Server Error: {str(error)}")
