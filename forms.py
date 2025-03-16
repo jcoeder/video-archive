@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, EmailField, BooleanField
-from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional
+from wtforms import StringField, PasswordField, SubmitField, EmailField, BooleanField, TextAreaField, URLField
+from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional, URL
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
@@ -17,7 +17,7 @@ class AdminUserCreateForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=4, max=64)])
     email = EmailField('Email', validators=[Optional(), Email()])
     password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
-    is_admin = BooleanField('Make Admin')  # Changed from SubmitField to BooleanField
+    is_admin = BooleanField('Make Admin')
     submit = SubmitField('Create User')
 
 class ChangePasswordForm(FlaskForm):
@@ -31,3 +31,7 @@ class ChangePasswordForm(FlaskForm):
         EqualTo('new_password', message='Passwords must match')
     ])
     submit = SubmitField('Change Password')
+
+class UploadForm(FlaskForm):
+    youtube_url = URLField('YouTube URL', validators=[Optional(), URL()])
+    notes = TextAreaField('Notes')

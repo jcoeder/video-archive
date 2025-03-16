@@ -12,7 +12,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.utils import secure_filename
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from forms import LoginForm, RegisterForm, ChangePasswordForm, AdminUserCreateForm
+from forms import LoginForm, RegisterForm, ChangePasswordForm, AdminUserCreateForm, UploadForm
 from flask_dropzone import Dropzone
 
 # Initialize Flask app
@@ -234,10 +234,12 @@ def logout():
 @login_required
 def index():
     from models import Video, Category
+    from forms import UploadForm
     # Remove admin override - all users only see their own videos
     videos = Video.query.filter_by(user_id=current_user.id).order_by(Video.date_archived.desc()).all()
     categories = Category.query.filter_by(user_id=current_user.id).order_by(Category.name).all()
-    return render_template('index.html', videos=videos, categories=categories)
+    form = UploadForm()
+    return render_template('index.html', videos=videos, categories=categories, form=form)
 
 @app.route('/upload', methods=['POST'])
 @login_required
