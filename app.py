@@ -644,7 +644,7 @@ def delete_user(user_id):
         flash('Access denied. Admin privileges required.', 'danger')
         return redirect(url_for('admin'))
 
-    from models import User
+    from models import User, Video, Category
     user = User.query.get_or_404(user_id)
 
     if user.username == 'admin':
@@ -662,41 +662,74 @@ def delete_user(user_id):
             if transfer_user_id:
                 transfer_user = User.query.get(transfer_user_id)
                 if transfer_user:
-                    # Transfer videos to new user
-                    for video in user.videos:
-                        # Update video ownership
-                        video.user_id = transfer_user.id
+                    try:
+                        # Get existing categories for transfer user
+                        existing_categories = {cat.name.lower(): cat for cat in transfer_user.categories}
 
-                        # Move video files to new user's folders
-                        old_file_path = video.file_path
-                        old_thumb_path = video.thumbnail_path
+                        # First, transfer all videos to new user and update paths
+                        for video in Video.query.filter_by(user_id=user.id).all():
+                            # Update video ownership and paths
+                            video.user_id = transfer_user.id
+                            video.file_path = video.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
+                            if video.thumbnail_path:
+                                video.thumbnail_path = video.thumbnail_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
+                            db.session.add(video)
 
-                        # Update paths to use new user's UUID
-                        video.file_path = video.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
-                        if video.thumbnail_path:
-                            video.thumbnail_path = video.thumbnail_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
+                        # Commit video ownership changes first
+                        db.session.commit()
 
-                        # Move files
-                        try:
-                            if os.path.exists(os.path.join('static', old_file_path)):
-                                os.makedirs(os.path.dirname(os.path.join('static', video.file_path)), exist_ok=True)
-                                import shutil
-                                shutil.move(os.path.join('static', old_file_path), 
-                                          os.path.join('static', video.file_path))
+                        # Now handle categories and their relationships
+                        for category in Category.query.filter_by(user_id=user.id).all():
+                            # Find or create corresponding category for transfer user
+                            transfer_category = existing_categories.get(category.name.lower())
+                            if not transfer_category:
+                                transfer_category = Category(
+                                    name=category.name,
+                                    user_id=transfer_user.id
+                                )
+                                db.session.add(transfer_category)
+                                existing_categories[category.name.lower()] = transfer_category
 
-                            if old_thumb_path and os.path.exists(os.path.join('static', old_thumb_path)):
-                                os.makedirs(os.path.dirname(os.path.join('static', video.thumbnail_path)), exist_ok=True)
-                                shutil.move(os.path.join('static', old_thumb_path),
-                                          os.path.join('static', video.thumbnail_path))
-                        except Exception as e:
-                            logging.error(f"Error moving files for video {video.id}: {str(e)}")
+                            # Move videos to transfer category
+                            for video in category.videos:
+                                if video not in transfer_category.videos:
+                                    transfer_category.videos.append(video)
 
-                    # Transfer categories
-                    for category in user.categories:
-                        category.user_id = transfer_user.id
+                            # Delete old category
+                            db.session.delete(category)
 
-        # Delete user's folders regardless of transfer status
-        # (if transferred, folders should be empty now)
+                        # Commit category changes
+                        db.session.commit()
+
+                        # Now move files after successful database update
+                        import shutil
+                        for video in Video.query.filter_by(user_id=transfer_user.id).all():
+                            old_path = os.path.join('static', video.file_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
+                            new_path = os.path.join('static', video.file_path)
+
+                            if os.path.exists(old_path):
+                                os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                                shutil.move(old_path, new_path)
+
+                            if video.thumbnail_path:
+                                old_thumb = os.path.join('static', video.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
+                                new_thumb = os.path.join('static', video.thumbnail_path)
+                                if os.path.exists(old_thumb):
+                                    os.makedirs(os.path.dirname(new_thumb), exist_ok=True)
+                                    shutil.move(old_thumb, new_thumb)
+
+                    except Exception as e:
+                        db.session.rollback()
+                        raise e
+
+        else:
+            # Delete all content if not transferring
+            for video in user.videos:
+                db.session.delete(video)
+            for category in user.categories:
+                db.session.delete(category)
+
+        # Delete user's folders
         try:
             import shutil
             if os.path.exists(user_upload_folder):
@@ -706,19 +739,16 @@ def delete_user(user_id):
         except Exception as e:
             logging.error(f"Error deleting user folders: {str(e)}")
 
-        if content_action != 'transfer':
-            # Delete all user's content if not transferring
-            for video in user.videos:
-                db.session.delete(video)
-            for category in user.categories:
-                db.session.delete(category)
-
+        # Finally delete the user
         db.session.delete(user)
         db.session.commit()
         flash(f'User {user.username} deleted successfully!', 'success')
+
     except Exception as e:
+        logger.error(f"Error deleting user: {str(e)}")
         db.session.rollback()
         flash(f'Error deleting user: {str(e)}', 'danger')
+
     return redirect(url_for('admin'))
 
 @app.errorhandler(500)
@@ -760,10 +790,11 @@ def check_and_sync_video_files():
                         video.thumbnail_path = None
                         logging.info(f"Removed thumbnail for missing video {video.id}")
                     except Exception as e:
-                        logging.error(f"Error removing thumbnail for video {video.id}: {str(e)}")
+                        logging.error(f"Errorremoving thumbnail for video {video.id}: {str(e)}")
             else:
                 # If original exists but web version is missing, create it
-                if os.path.exists(original_file) and not os.path.exists(web_file):
+                if os.path.exists(original_file) andnot os.path.exists(web_file):
+
                     logging.info(f"Regenerating web version for video {video.id}")
                     if transcode_video(original_file, web_file):
                         video.exists = True
