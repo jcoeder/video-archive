@@ -70,12 +70,16 @@
                             </form>
                         </div>
 
-                        <div id="upload-progress-container" class="d-none">
-                            <h6 class="mb-3">Upload Progress</h6>
-                            <div class="upload-progress-bar">
-                                <div class="progress" style="width: 0%"></div>
+                        <div id="overall-upload-status" class="mb-4 d-none">
+                            <div class="card bg-dark">
+                                <div class="card-body">
+                                    <h6 class="card-title">Upload Status</h6>
+                                    <div class="progress mb-2" style="height: 6px;">
+                                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                                    </div>
+                                    <p class="status-text mb-0 small text-muted">Ready to upload files...</p>
+                                </div>
                             </div>
-                            <div id="upload-status" class="small text-muted mt-2"></div>
                         </div>
 
                         <hr class="my-4">
@@ -240,10 +244,37 @@ myDropzone.on('success', function(file, response) {
     }
 });
 
-myDropzone.on('error', function(file, errorMessage) {
-    const uploadStatus = document.getElementById('upload-status');
-    uploadStatus.innerHTML = 'Upload failed. Please try again.';
-    alert('Upload failed. Please try again.');
+myDropzone.on("addedfile", function(file) {
+    document.getElementById('overall-upload-status').classList.remove('d-none');
+});
+
+myDropzone.on("totaluploadprogress", function(progress) {
+    const progressBar = document.querySelector('#overall-upload-status .progress-bar');
+    const statusText = document.querySelector('#overall-upload-status .status-text');
+    if (progressBar) {
+        progressBar.style.width = progress + "%";
+        if (progress === 100) {
+            statusText.textContent = 'Processing uploads...';
+        } else {
+            statusText.textContent = `Uploading files: ${Math.round(progress)}%`;
+        }
+    }
+});
+
+myDropzone.on("queuecomplete", function() {
+    const statusText = document.querySelector('#overall-upload-status .status-text');
+    statusText.textContent = 'All uploads completed!';
+    setTimeout(() => {
+        document.getElementById('overall-upload-status').classList.add('d-none');
+    }, 3000);
+});
+
+myDropzone.on("error", function(file, errorMessage) {
+    const statusText = document.querySelector('#overall-upload-status .status-text');
+    statusText.textContent = 'Upload failed. Please try again.';
+    setTimeout(() => {
+        document.getElementById('overall-upload-status').classList.add('d-none');
+    }, 3000);
 });
 
 // Category form handling
