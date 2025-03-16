@@ -532,29 +532,34 @@ def delete_video(video_id):
         return redirect(url_for('index'))
 
     try:
-        # Get file paths
-        if video.file_path:
-            file_path = os.path.join('static', video.file_path)
-            original_file = os.path.join('static/uploads', str(video.user_id), 
-                f"original_{os.path.basename(video.file_path)}")
-            web_file = os.path.join('static/uploads', str(video.user_id), 
-                f"web_{os.path.basename(video.file_path)}")
+        # Get base file paths
+        user_upload_dir = os.path.join('static/uploads', str(video.user_id))
+        filename = os.path.basename(video.file_path)
 
-            # Delete original file if it exists
-            if os.path.exists(original_file):
-                try:
-                    os.remove(original_file)
-                    logging.info(f"Deleted original file: {original_file}")
-                except Exception as e:
-                    logging.error(f"Error deleting original file {original_file}: {str(e)}")
+        # Handle different possible filename patterns
+        if filename.startswith('web_'):
+            base_filename = filename[4:]  # Remove 'web_' prefix
+        else:
+            base_filename = filename
 
-            # Delete web-optimized file if it exists
-            if os.path.exists(web_file):
-                try:
-                    os.remove(web_file)
-                    logging.info(f"Deleted web file: {web_file}")
-                except Exception as e:
-                    logging.error(f"Error deleting web file {web_file}: {str(e)}")
+        original_file = os.path.join(user_upload_dir, f"original_{base_filename}")
+        web_file = os.path.join(user_upload_dir, f"web_{base_filename}")
+
+        # Delete original file if it exists
+        if os.path.exists(original_file):
+            try:
+                os.remove(original_file)
+                logging.info(f"Deleted original file: {original_file}")
+            except Exception as e:
+                logging.error(f"Error deleting original file {original_file}: {str(e)}")
+
+        # Delete web-optimized file if it exists
+        if os.path.exists(web_file):
+            try:
+                os.remove(web_file)
+                logging.info(f"Deleted web file: {web_file}")
+            except Exception as e:
+                logging.error(f"Error deleting web file {web_file}: {str(e)}")
 
         # Delete thumbnail if it exists
         if video.thumbnail_path:
@@ -574,7 +579,6 @@ def delete_video(video_id):
         logger.error(f"Error deleting video: {str(e)}")
         flash(f'Error deleting video: {str(e)}', 'danger')
     return redirect(url_for('index'))
-
 
 @app.route('/admin/create_user', methods=['POST'])
 @login_required
