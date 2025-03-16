@@ -109,6 +109,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     }
                     categoryInput.value = ''; // Clear input
+                    categoryInput.focus(); // Keep focus on input field
 
                     // Show success notification
                     const toastDiv = document.createElement('div');
