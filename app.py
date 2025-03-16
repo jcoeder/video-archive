@@ -354,9 +354,9 @@ def upload_video():
             if file and allowed_file(file.filename):
                 original_filename = secure_filename(file.filename)
                 user_upload_folder = get_user_upload_folder(current_user.id)
-                original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
 
-                # Ensure directory exists
+                # Save original file
+                original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
                 os.makedirs(os.path.dirname(original_filepath), exist_ok=True)
                 file.save(original_filepath)
 
@@ -374,19 +374,19 @@ def upload_video():
                         flash('This video has already been uploaded.', 'warning')
                         return redirect(url_for('video_detail', video_id=duplicate.id))
 
-                # Continue with transcoding if no duplicate found
-                final_filename = f"web_{original_filename.rsplit('.', 1)[0]}.mp4"
-                final_filepath = os.path.join(user_upload_folder, final_filename)
+                # Create web-optimized version
+                web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
+                web_filepath = os.path.join(user_upload_folder, web_filename)
 
-                if transcode_video(original_filepath, final_filepath):
+                if transcode_video(original_filepath, web_filepath):
                     # Generate thumbnail with timestamp
-                    thumbnail_filename = f"{os.path.splitext(final_filename)[0]}_{int(time.time())}_thumb.jpg"
+                    thumbnail_filename = f"{os.path.splitext(web_filename)[0]}_{int(time.time())}_thumb.jpg"
                     thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user.id), thumbnail_filename)
 
-                    if generate_thumbnail(final_filepath, thumbnail_path):
+                    if generate_thumbnail(web_filepath, thumbnail_path):
                         video = Video(
                             title=os.path.splitext(original_filename)[0],
-                            file_path=f"uploads/{current_user.id}/{final_filename}",
+                            file_path=f"uploads/{current_user.id}/{web_filename}",  # Store web version path
                             thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",
                             notes=notes,
                             date_archived=datetime.now(),
@@ -403,17 +403,22 @@ def upload_video():
                         db.session.add(video)
                         db.session.commit()
 
-                        # Clean up original file
-                        try:
-                            os.remove(original_filepath)
-                        except Exception as e:
-                            logging.error(f"Error removing original file: {str(e)}")
-
                         flash('Video successfully archived!', 'success')
                     else:
+                        # Clean up files on thumbnail generation failure
+                        try:
+                            os.remove(original_filepath)
+                            os.remove(web_filepath)
+                        except Exception as e:
+                            logging.error(f"Error cleaning up files: {str(e)}")
                         flash('Error generating thumbnail', 'error')
                         return redirect(url_for('index'))
                 else:
+                    # Clean up original file on transcoding failure
+                    try:
+                        os.remove(original_filepath)
+                    except Exception as e:
+                        logging.error(f"Error cleaning up original file: {str(e)}")
                     flash('Error processing video file', 'error')
                     return redirect(url_for('index'))
 
@@ -425,9 +430,9 @@ def upload_video():
 
                 original_filename = secure_filename(yt.title + '.mp4')
                 user_upload_folder = get_user_upload_folder(current_user.id)
-                original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
 
-                # Ensure directory exists
+                # Save original file
+                original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
                 os.makedirs(os.path.dirname(original_filepath), exist_ok=True)
                 stream.download(filename=original_filepath)
 
@@ -445,20 +450,19 @@ def upload_video():
                         flash('This video has already been uploaded.', 'warning')
                         return redirect(url_for('video_detail', video_id=duplicate.id))
 
+                # Create web-optimized version
+                web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
+                web_filepath = os.path.join(user_upload_folder, web_filename)
 
-                # Transcode YouTube video
-                final_filename = f"web_{original_filename}"
-                final_filepath = os.path.join(user_upload_folder, final_filename)
-
-                if transcode_video(original_filepath, final_filepath):
+                if transcode_video(original_filepath, web_filepath):
                     # Generate thumbnail with timestamp
-                    thumbnail_filename = f"{os.path.splitext(final_filename)[0]}_{int(time.time())}_thumb.jpg"
+                    thumbnail_filename = f"{os.path.splitext(web_filename)[0]}_{int(time.time())}_thumb.jpg"
                     thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user.id), thumbnail_filename)
 
-                    if generate_thumbnail(final_filepath, thumbnail_path):
+                    if generate_thumbnail(web_filepath, thumbnail_path):
                         video = Video(
                             title=yt.title,
-                            file_path=f"uploads/{current_user.id}/{final_filename}",
+                            file_path=f"uploads/{current_user.id}/{web_filename}",  # Store web version path
                             thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",
                             notes=notes,
                             date_archived=datetime.now(),
@@ -475,19 +479,25 @@ def upload_video():
                         db.session.add(video)
                         db.session.commit()
 
-                        # Clean up original file
-                        try:
-                            os.remove(original_filepath)
-                        except Exception as e:
-                            logging.error(f"Error removing original file: {str(e)}")
-
                         flash('Video successfully archived!', 'success')
                     else:
+                        # Clean up files on thumbnail generation failure
+                        try:
+                            os.remove(original_filepath)
+                            os.remove(web_filepath)
+                        except Exception as e:
+                            logging.error(f"Error cleaning up files: {str(e)}")
                         flash('Error generating thumbnail', 'error')
                         return redirect(url_for('index'))
                 else:
+                    # Clean up original file on transcoding failure
+                    try:
+                        os.remove(original_filepath)
+                    except Exception as e:
+                        logging.error(f"Error cleaning up original file: {str(e)}")
                     flash('Error processing YouTube video', 'error')
                     return redirect(url_for('index'))
+
             except Exception as e:
                 logging.error(f"Error downloading YouTube video: {str(e)}")
                 flash('Error downloading YouTube video. Please try again.', 'error')
