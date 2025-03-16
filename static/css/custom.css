@@ -66,6 +66,10 @@
     color: var(--bs-primary);
 }
 
+.dropzone .dz-remove-container {
+    margin: 1rem 0;
+}
+
 .dropzone .dz-progress {
     height: 4px;
     background: var(--bs-gray-700) !important;
@@ -85,7 +89,6 @@
 .dropzone .dz-preview .dz-success-mark,
 .dropzone .dz-preview .dz-error-mark {
     display: none;
-    font-size: 1.25rem;
 }
 
 .dropzone .dz-preview.dz-success .dz-success-mark {
