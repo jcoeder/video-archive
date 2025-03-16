@@ -264,14 +264,29 @@ def upload_video():
             try:
                 # Configure yt-dlp options
                 ydl_opts = {
-                    'format': 'best[ext=mp4]',
-                    'outtmpl': 'temp_%(title)s.%(ext)s'
+                    'format': 'best[ext=mp4]',  # Get best MP4 format
+                    'outtmpl': 'temp_%(title)s.%(ext)s',
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extract_flat': False,
+                    'postprocessors': [{
+                        'key': 'FFmpegVideoConvertor',
+                        'preferedformat': 'mp4'
+                    }]
                 }
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     # Download video info first
                     info = ydl.extract_info(url, download=False)
+                    if not info:
+                        flash('Could not retrieve video information', 'error')
+                        return redirect(url_for('index'))
+
                     title = info.get('title', '')
+                    if not title:
+                        flash('Could not retrieve video title', 'error')
+                        return redirect(url_for('index'))
+
                     original_filename = secure_filename(f"{title}.mp4")
                     user_upload_folder = get_user_upload_folder(current_user)
 
@@ -323,7 +338,8 @@ def upload_video():
 
                             db.session.add(video)
                             db.session.commit()
-                            flash('Video successfully archived!', 'success')
+                            flash('YouTube video successfully archived!', 'success')
+                            return redirect(url_for('index'))
                         else:
                             cleanup_files([original_filepath, web_filepath])
                             flash('Error generating thumbnail', 'error')
@@ -331,10 +347,13 @@ def upload_video():
                         cleanup_files([original_filepath])
                         flash('Error processing YouTube video', 'error')
 
+            except yt_dlp.utils.DownloadError as e:
+                logging.error(f"YouTube download error: {str(e)}")
+                flash('Could not download the video. Please check the URL and try again.', 'error')
             except Exception as e:
                 logging.error(f"Error downloading YouTube video: {str(e)}")
                 flash('Error downloading YouTube video. Please try again.', 'error')
-                return redirect(url_for('index'))
+            return redirect(url_for('index'))
 
         elif request.files:
             # Handle multiple file uploads
@@ -784,7 +803,7 @@ def check_and_sync_video_files():
                     except Exception as e:
                         logging.error(f"Errorremoving thumbnail for video {video.id}: {str(e)}")
             else:
-                # If original exists but web version is missing, create it
+                # If originalexists but web version is missing, create it
                 if os.path.exists(original_file) and not os.path.exists(web_file):
                     logging.info(f"Regenerating web version for video {video.id}")
                     if transcode_video(original_file, web_file):
