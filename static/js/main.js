@@ -70,18 +70,44 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Add new category to the list
-                    const categoriesContainer = document.getElementById('categoriesContainer');
-                    const newCategory = document.createElement('div');
-                    newCategory.className = 'form-check';
-                    newCategory.innerHTML = `
-                        <input class="form-check-input" type="checkbox" name="categories" 
-                               value="${data.category.id}" id="category${data.category.id}">
-                        <label class="form-check-label" for="category${data.category.id}">
-                            ${data.category.name}
-                        </label>
-                    `;
-                    categoriesContainer.appendChild(newCategory);
+                    // Check if we're using select2 (video details page)
+                    const select2Container = document.querySelector('[data-bs-toggle="select2"]');
+                    if (select2Container) {
+                        // Add new option to select2 and select it
+                        const newOption = new Option(data.category.name, data.category.id, true, true);
+                        $(select2Container).append(newOption).trigger('change');
+
+                        // Sort select2 options alphabetically
+                        const options = Array.from(select2Container.options);
+                        options.sort((a, b) => a.text.localeCompare(b.text));
+                        select2Container.innerHTML = '';
+                        options.forEach(option => select2Container.appendChild(option));
+                    } else {
+                        // Add new checkbox to the categories container (upload page)
+                        const categoriesContainer = document.getElementById('categoriesContainer');
+                        const newCategory = document.createElement('div');
+                        newCategory.className = 'form-check';
+                        newCategory.innerHTML = `
+                            <input class="form-check-input" type="checkbox" name="categories" 
+                                   value="${data.category.id}" id="category${data.category.id}" checked>
+                            <label class="form-check-label" for="category${data.category.id}">
+                                ${data.category.name}
+                            </label>
+                        `;
+
+                        // Insert the new category in alphabetical order
+                        const categories = Array.from(categoriesContainer.children);
+                        const insertIndex = categories.findIndex(cat => {
+                            const label = cat.querySelector('label');
+                            return label && label.textContent.trim().localeCompare(data.category.name) > 0;
+                        });
+
+                        if (insertIndex === -1) {
+                            categoriesContainer.appendChild(newCategory);
+                        } else {
+                            categoriesContainer.insertBefore(newCategory, categories[insertIndex]);
+                        }
+                    }
                     categoryInput.value = ''; // Clear input
 
                     // Show success notification
