@@ -659,8 +659,14 @@ def sync_video_files():
 
             # Get file paths
             web_file = os.path.join('static', video.file_path)
-            original_file = os.path.join('static/uploads', str(video.user_id), 
-                                       f"original_{os.path.basename(video.file_path)}")
+            web_filename = os.path.basename(video.file_path)
+
+            # Handle original filename (remove 'web_' if present)
+            original_filename = web_filename
+            if original_filename.startswith('web_'):
+                original_filename = original_filename[4:]  # Remove 'web_' prefix
+
+            original_file = os.path.join('static/uploads', str(video.user_id), f"original_{original_filename}")
             thumbnail_file = os.path.join('static', video.thumbnail_path) if video.thumbnail_path else None
 
             # Check and fix missing files
