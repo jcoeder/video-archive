@@ -12,7 +12,7 @@ from werkzeug.utils import secure_filename
 from pytube import YouTube
 import urllib.parse
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from forms import LoginForm, RegisterForm, ChangePasswordForm  # Added ChangePasswordForm import
+from forms import LoginForm, RegisterForm, ChangePasswordForm, AdminUserCreateForm  # Added AdminUserCreateForm import
 
 
 # Configure logging
@@ -473,6 +473,35 @@ def delete_video(video_id):
     return redirect(url_for('index'))
 
 
+@app.route('/admin/create_user', methods=['POST'])
+@login_required
+def admin_create_user():
+    if not current_user.is_admin:
+        flash('Access denied. Admin privileges required.', 'danger')
+        return redirect(url_for('index'))
+
+    form = AdminUserCreateForm()
+    if form.validate_on_submit():
+        from models import User
+        if User.query.filter_by(username=form.username.data).first():
+            flash('Username already exists', 'danger')
+            return redirect(url_for('admin'))
+
+        if form.email.data and User.query.filter_by(email=form.email.data).first():
+            flash('Email already registered', 'danger')
+            return redirect(url_for('admin'))
+
+        user = User(
+            username=form.username.data,
+            email=form.email.data,
+            is_admin=form.is_admin.data
+        )
+        user.set_password(form.password.data)
+        db.session.add(user)
+        db.session.commit()
+        flash(f'User {form.username.data} created successfully!', 'success')
+    return redirect(url_for('admin'))
+
 @app.route('/admin')
 @login_required
 def admin():
@@ -480,9 +509,10 @@ def admin():
         flash('Access denied. Admin privileges required.', 'danger')
         return redirect(url_for('index'))
 
+    form = AdminUserCreateForm()
     from models import User
     users = User.query.all()
-    return render_template('admin.html', users=users)
+    return render_template('admin.html', users=users, form=form)
 
 @app.route('/admin/toggle/<int:user_id>', methods=['POST'])
 @login_required
@@ -549,7 +579,7 @@ def internal_error(error):
 
 # Initialize database and create admin user
 with app.app_context():
-    # Import models so they can be created
+    # Import models
     from models import Video, Category, User
 
     # Drop all tables to reset
@@ -557,13 +587,16 @@ with app.app_context():
     # Create all tables with proper schema
     db.create_all()
 
-    # Create default admin user if it doesn't exist
-    admin_user = User.query.filter_by(username='admin').first()
-    if not admin_user:
-        admin_user = User(id=1, username='admin', email='admin@example.com', is_admin=True)
-        admin_user.set_password('admin')
-        db.session.add(admin_user)
-        db.session.commit()
+    # Create default admin user with ID 1
+    admin_user = User(
+        id=1,
+        username='admin',
+        email='admin@example.com',
+        is_admin=True
+    )
+    admin_user.set_password('admin')
+    db.session.add(admin_user)
+    db.session.commit()
 
 # Start scanning thread
 scanning_thread = threading.Thread(target=scan_video_directory, daemon=True)

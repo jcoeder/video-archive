@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, EmailField
-from wtforms.validators import DataRequired, Email, Length, EqualTo
+from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
@@ -9,9 +9,16 @@ class LoginForm(FlaskForm):
 
 class RegisterForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=4, max=64)])
-    email = EmailField('Email', validators=[DataRequired(), Email()])
+    email = EmailField('Email', validators=[Optional(), Email()])  # Made email optional
     password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
     submit = SubmitField('Register')
+
+class AdminUserCreateForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), Length(min=4, max=64)])
+    email = EmailField('Email', validators=[Optional(), Email()])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
+    is_admin = SubmitField('Make Admin')
+    submit = SubmitField('Create User')
 
 class ChangePasswordForm(FlaskForm):
     current_password = PasswordField('Current Password', validators=[DataRequired()])
