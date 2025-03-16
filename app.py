@@ -264,88 +264,106 @@ def upload_video():
             try:
                 # Configure yt-dlp options
                 ydl_opts = {
-                    'format': 'best[ext=mp4]',  # Get best MP4 format
-                    'outtmpl': 'temp_%(title)s.%(ext)s',
+                    'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',  # Prefer MP4 but fallback to best available
+                    'outtmpl': '%(title)s.%(ext)s',  # Simple template
                     'quiet': True,
                     'no_warnings': True,
                     'extract_flat': False,
+                    'merge_output_format': 'mp4',
                     'postprocessors': [{
                         'key': 'FFmpegVideoConvertor',
-                        'preferedformat': 'mp4'
-                    }]
+                        'preferedformat': 'mp4',
+                    }],
+                    'logger': logging.getLogger('yt-dlp')
                 }
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    # Download video info first
-                    info = ydl.extract_info(url, download=False)
-                    if not info:
-                        flash('Could not retrieve video information', 'error')
-                        return redirect(url_for('index'))
+                    try:
+                        # Extract video info first
+                        info_dict = ydl.extract_info(url, download=False)
+                        logging.info(f"Video info extracted: {info_dict.get('title', 'No title found')}")
 
-                    title = info.get('title', '')
-                    if not title:
-                        flash('Could not retrieve video title', 'error')
-                        return redirect(url_for('index'))
-
-                    original_filename = secure_filename(f"{title}.mp4")
-                    user_upload_folder = get_user_upload_folder(current_user)
-
-                    # Set the output path
-                    original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
-                    ydl_opts['outtmpl'] = original_filepath
-
-                    # Download the video
-                    ydl.download([url])
-
-                    # Calculate file hash
-                    file_hash = calculate_file_hash(original_filepath)
-                    if file_hash:
-                        # Check for duplicates
-                        duplicate = check_duplicate_video(file_hash, current_user.id)
-                        if duplicate:
-                            try:
-                                os.remove(original_filepath)
-                            except Exception as e:
-                                logging.error(f"Error removing duplicate file: {str(e)}")
-                            flash('This video has already been uploaded.', 'warning')
-                            return redirect(url_for('video_detail', video_id=duplicate.id))
-
-                    # Create web-optimized version
-                    web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
-                    web_filepath = os.path.join(user_upload_folder, web_filename)
-
-                    if transcode_video(original_filepath, web_filepath):
-                        # Generate thumbnail
-                        thumbnail_filename = f"video_{int(time.time())}_thumb.jpg"
-                        thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
-
-                        if generate_thumbnail(web_filepath, thumbnail_path):
-                            video = Video(
-                                title=title,
-                                file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",
-                                thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
-                                notes=notes,
-                                date_archived=datetime.now(),
-                                user_id=current_user.id,
-                                file_hash=file_hash
-                            )
-
-                            # Add categories
-                            for category_id in categories:
-                                category = Category.query.get(category_id)
-                                if category and category.user_id == current_user.id:
-                                    video.categories.append(category)
-
-                            db.session.add(video)
-                            db.session.commit()
-                            flash('YouTube video successfully archived!', 'success')
+                        if not info_dict:
+                            flash('Could not retrieve video information', 'error')
                             return redirect(url_for('index'))
+
+                        # Get video title and sanitize it
+                        video_title = info_dict.get('title')
+                        if not video_title:
+                            flash('Could not retrieve video title', 'error')
+                            return redirect(url_for('index'))
+
+                        # Prepare filenames
+                        original_filename = secure_filename(f"{video_title}.mp4")
+                        user_upload_folder = get_user_upload_folder(current_user)
+                        original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
+
+                        # Update output template to use our path
+                        ydl_opts['outtmpl'] = original_filepath
+
+                        # Download the video
+                        logging.info(f"Starting download of video: {video_title}")
+                        ydl.download([url])
+
+                        if not os.path.exists(original_filepath):
+                            logging.error("Download completed but file not found")
+                            flash('Error saving downloaded video', 'error')
+                            return redirect(url_for('index'))
+
+                        # Calculate file hash
+                        file_hash = calculate_file_hash(original_filepath)
+                        if file_hash:
+                            # Check for duplicates
+                            duplicate = check_duplicate_video(file_hash, current_user.id)
+                            if duplicate:
+                                try:
+                                    os.remove(original_filepath)
+                                except Exception as e:
+                                    logging.error(f"Error removing duplicate file: {str(e)}")
+                                flash('This video has already been uploaded.', 'warning')
+                                return redirect(url_for('video_detail', video_id=duplicate.id))
+
+                        # Create web-optimized version
+                        web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
+                        web_filepath = os.path.join(user_upload_folder, web_filename)
+
+                        if transcode_video(original_filepath, web_filepath):
+                            # Generate thumbnail
+                            thumbnail_filename = f"video_{int(time.time())}_thumb.jpg"
+                            thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
+
+                            if generate_thumbnail(web_filepath, thumbnail_path):
+                                video = Video(
+                                    title=video_title,
+                                    file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",
+                                    thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
+                                    notes=notes,
+                                    date_archived=datetime.now(),
+                                    user_id=current_user.id,
+                                    file_hash=file_hash
+                                )
+
+                                # Add categories
+                                for category_id in categories:
+                                    category = Category.query.get(category_id)
+                                    if category and category.user_id == current_user.id:
+                                        video.categories.append(category)
+
+                                db.session.add(video)
+                                db.session.commit()
+                                flash('YouTube video successfully archived!', 'success')
+                                return redirect(url_for('index'))
+                            else:
+                                cleanup_files([original_filepath, web_filepath])
+                                flash('Error generating thumbnail', 'error')
                         else:
-                            cleanup_files([original_filepath, web_filepath])
-                            flash('Error generating thumbnail', 'error')
-                    else:
-                        cleanup_files([original_filepath])
-                        flash('Error processing YouTube video', 'error')
+                            cleanup_files([original_filepath])
+                            flash('Error processing YouTube video', 'error')
+
+                    except Exception as e:
+                        logging.error(f"Error processing YouTube info/download: {str(e)}")
+                        flash('Error processing video information', 'error')
+                        return redirect(url_for('index'))
 
             except yt_dlp.utils.DownloadError as e:
                 logging.error(f"YouTube download error: {str(e)}")
