@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Add category form handling
+    // Category form handling - unified for all pages
     const categoryForm = document.getElementById('categoryForm');
     if (categoryForm) {
         categoryForm.addEventListener('submit', function(e) {
@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Add new checkbox to the categories container (upload and video detail pages)
+                    // Add new checkbox to the categories container
                     const categoriesContainer = document.getElementById('categoriesContainer');
                     const newCategory = document.createElement('div');
                     newCategory.className = 'form-check';
@@ -114,7 +114,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.body.appendChild(toastDiv);
 
                     const toast = new bootstrap.Toast(toastDiv, {
-                        delay: 3000, // Auto-hide after 3 seconds
+                        delay: 3000,
                         animation: true
                     });
                     toast.show();
