@@ -6,7 +6,7 @@ from datetime import datetime
 import cv2
 import threading
 import time
-import yt_dlp
+from pytube import YouTube
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
@@ -262,51 +262,44 @@ def upload_video():
         # YouTube video download handling
         if 'youtube_url' in request.form:
             url = request.form['youtube_url']
+
+            # Basic URL validation
+            if not url.startswith(('http://', 'https://')):
+                flash('Please enter a valid URL', 'error')
+                return redirect(url_for('index'))
+
             try:
-                # Setup paths
+                # Setup basic paths
                 timestamp = int(time.time())
                 user_upload_folder = get_user_upload_folder(current_user)
-                temp_filepath = os.path.join(user_upload_folder, f"download_{timestamp}.mp4")
+                temp_filepath = os.path.join(user_upload_folder, f"yt_{timestamp}.mp4")
 
-                logging.info(f"Processing YouTube URL: {url}")
+                # Download video using pytube
+                try:
+                    logging.info(f"Starting YouTube download for: {url}")
+                    yt = YouTube(url)
+                    video_title = secure_filename(yt.title)
 
-                # Basic configuration for yt-dlp
-                ydl_opts = {
-                    'format': 'mp4',  # Simplest format selection
-                    'outtmpl': temp_filepath,
-                    'quiet': False,
-                    'verbose': True
-                }
+                    # Get highest resolution stream
+                    stream = yt.streams.filter(progressive=True).order_by('resolution').desc().first()
+                    if not stream:
+                        raise ValueError("No suitable video stream found")
 
-                logging.info("Starting download process...")
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    try:
-                        # Extract info and download in one step
-                        info_dict = ydl.extract_info(url)
+                    # Download the video
+                    stream.download(filename=temp_filepath)
 
-                        if not info_dict:
-                            raise ValueError("Failed to extract video information")
+                    if not os.path.exists(temp_filepath):
+                        raise FileNotFoundError("Download failed - file not found")
 
-                        # Get the video title
-                        title = info_dict.get('title', '')
-                        if not title:
-                            title = f'video_{timestamp}'
+                    logging.info(f"Video downloaded successfully: {video_title}")
 
-                        logging.info(f"Downloaded video with title: {title}")
-                        video_title = secure_filename(title)
+                    # Process video
+                    original_filepath = os.path.join(user_upload_folder, f"original_{video_title}.mp4")
+                    web_filepath = os.path.join(user_upload_folder, f"web_{video_title}.mp4")
 
-                        # Check if file was downloaded
-                        if not os.path.exists(temp_filepath):
-                            raise FileNotFoundError("Download completed but file not found")
-
-                        # Move file to final location
-                        original_filepath = os.path.join(user_upload_folder, f"original_{video_title}.mp4")
-                        os.rename(temp_filepath, original_filepath)
-
-                        # Process the downloaded file
-                        web_filename = f"web_{video_title}.mp4"
-                        web_filepath = os.path.join(user_upload_folder, web_filename)
-
+                    # Convert to MP4 if needed
+                    if transcode_video(temp_filepath, original_filepath):
+                        # Create web version
                         if transcode_video(original_filepath, web_filepath):
                             # Generate thumbnail
                             thumbnail_filename = f"thumb_{timestamp}.jpg"
@@ -315,7 +308,7 @@ def upload_video():
                             if generate_thumbnail(web_filepath, thumbnail_path):
                                 video = Video(
                                     title=video_title,
-                                    file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",
+                                    file_path=f"uploads/{current_user.get_storage_path()}/web_{video_title}.mp4",
                                     thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
                                     notes=notes,
                                     date_archived=datetime.now(),
@@ -330,27 +323,33 @@ def upload_video():
 
                                 db.session.add(video)
                                 db.session.commit()
+
+                                # Cleanup temporary files
+                                cleanup_files([temp_filepath])
                                 flash('YouTube video successfully archived!', 'success')
                                 return redirect(url_for('index'))
                             else:
-                                cleanup_files([original_filepath, web_filepath])
+                                cleanup_files([temp_filepath, original_filepath, web_filepath])
                                 flash('Error generating thumbnail', 'error')
                         else:
-                            cleanup_files([original_filepath])
-                            flash('Error processing video', 'error')
-
-                    except Exception as e:
-                        logging.error(f"Error during download process: {str(e)}")
-                        logging.error(f"Error type: {type(e).__name__}", exc_info=True)
+                            cleanup_files([temp_filepath, original_filepath])
+                            flash('Error creating web version', 'error')
+                    else:
                         cleanup_files([temp_filepath])
                         flash('Error processing video', 'error')
-                        return redirect(url_for('index'))
+
+                except Exception as e:
+                    logging.error(f"YouTube processing error: {str(e)}")
+                    logging.error(f"Error type: {type(e).__name__}", exc_info=True)
+                    cleanup_files([temp_filepath])
+                    flash('Error processing video', 'error')
+
+                return redirect(url_for('index'))
 
             except Exception as e:
                 logging.error(f"Error: {str(e)}")
                 flash('An unexpected error occurred', 'error')
-
-            return redirect(url_for('index'))
+                return redirect(url_for('index'))
 
         elif request.files:
             # Handle multiple file uploads
@@ -791,7 +790,7 @@ def check_and_sync_video_files():
             # Check if both video files are missing
             if not os.path.exists(web_file) and not os.path.exists(original_file):
                 video.exists = False
-                                # Remove thumbnail if it exists
+                # Remove thumbnail if it exists
                 if thumbnail_file and os.path.exists(thumbnail_file):
                     try:
                         os.remove(thumbnail_file)
@@ -809,15 +808,15 @@ def check_and_sync_video_files():
                         logging.error(f"Failed to generate web version for video {video.id}")
 
                 # If web exists but original is missing, restore it
-                if os.path.exists(web_file) and not os.path.exists(original_file):
-                    logging.info(f"Copying web version to original for video {video.id}")
-                    try:
-                        os.makedirs(os.path.dirname(original_file), exist_ok=True)
-                        import shutil
-                        shutil.copy2(web_file, original_file)
-                        logging.info(f"Successfully restored original file: {original_file}")
-                    except Exception as e:
-                        logging.error(f"Error copying web to original for video {video.id}: {str(e)}")
+                    if os.path.exists(web_file) and not os.path.exists(original_file):
+                        logging.info(f"Copying web version to original for video {video.id}")
+                        try:
+                            os.makedirs(os.path.dirname(original_file), exist_ok=True)
+                            import shutil
+                            shutil.copy2(web_file, original_file)
+                            logging.info(f"Successfully restored original file: {original_file}")
+                        except Exception as e:
+                            logging.error(f"Error copying web to original for video {video.id}: {str(e)}")
 
             db.session.commit()
 
