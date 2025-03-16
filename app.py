@@ -6,6 +6,7 @@ from datetime import datetime
 import cv2
 import threading
 import time
+import yt_dlp # Added import for yt-dlp
 from pytube import YouTube
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
@@ -262,94 +263,72 @@ def upload_video():
         # YouTube video download handling
         if 'youtube_url' in request.form:
             url = request.form['youtube_url']
-
-            # Basic URL validation
-            if not url.startswith(('http://', 'https://')):
-                flash('Please enter a valid URL', 'error')
-                return redirect(url_for('index'))
-
             try:
-                # Setup basic paths
+                # Basic setup
                 timestamp = int(time.time())
                 user_upload_folder = get_user_upload_folder(current_user)
-                temp_filepath = os.path.join(user_upload_folder, f"yt_{timestamp}.mp4")
 
-                # Download video using pytube
-                try:
-                    logging.info(f"Starting YouTube download for: {url}")
-                    yt = YouTube(url)
-                    video_title = secure_filename(yt.title)
+                # Simplest possible yt-dlp options
+                ydl_opts = {
+                    'format': 'best',
+                    'outtmpl': os.path.join(user_upload_folder, '%(title)s.%(ext)s')
+                }
 
-                    # Get highest resolution stream
-                    stream = yt.streams.filter(progressive=True).order_by('resolution').desc().first()
-                    if not stream:
-                        raise ValueError("No suitable video stream found")
+                # Download video
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    result = ydl.extract_info(url, download=True)
+                    video_title = secure_filename(result['title'])
+                    downloaded_file = os.path.join(user_upload_folder, f"{video_title}.{result['ext']}")
 
-                    # Download the video
-                    stream.download(filename=temp_filepath)
+                    if not os.path.exists(downloaded_file):
+                        raise FileNotFoundError("Download failed")
 
-                    if not os.path.exists(temp_filepath):
-                        raise FileNotFoundError("Download failed - file not found")
-
-                    logging.info(f"Video downloaded successfully: {video_title}")
-
-                    # Process video
+                    # Setup paths for processing
                     original_filepath = os.path.join(user_upload_folder, f"original_{video_title}.mp4")
                     web_filepath = os.path.join(user_upload_folder, f"web_{video_title}.mp4")
 
-                    # Convert to MP4 if needed
-                    if transcode_video(temp_filepath, original_filepath):
-                        # Create web version
-                        if transcode_video(original_filepath, web_filepath):
-                            # Generate thumbnail
-                            thumbnail_filename = f"thumb_{timestamp}.jpg"
-                            thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
+                    # Move downloaded file
+                    os.rename(downloaded_file, original_filepath)
 
-                            if generate_thumbnail(web_filepath, thumbnail_path):
-                                video = Video(
-                                    title=video_title,
-                                    file_path=f"uploads/{current_user.get_storage_path()}/web_{video_title}.mp4",
-                                    thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
-                                    notes=notes,
-                                    date_archived=datetime.now(),
-                                    user_id=current_user.id
-                                )
+                    # Process video
+                    if transcode_video(original_filepath, web_filepath):
+                        # Generate thumbnail
+                        thumbnail_filename = f"thumb_{timestamp}.jpg"
+                        thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
 
-                                # Add categories
-                                for category_id in categories:
-                                    category = Category.query.get(category_id)
-                                    if category and category.user_id == current_user.id:
-                                        video.categories.append(category)
+                        if generate_thumbnail(web_filepath, thumbnail_path):
+                            # Create video entry
+                            video = Video(
+                                title=video_title,
+                                file_path=f"uploads/{current_user.get_storage_path()}/web_{video_title}.mp4",
+                                thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
+                                notes=notes,
+                                date_archived=datetime.now(),
+                                user_id=current_user.id
+                            )
 
-                                db.session.add(video)
-                                db.session.commit()
+                            # Add categories
+                            for category_id in categories:
+                                category = Category.query.get(category_id)
+                                if category and category.user_id == current_user.id:
+                                    video.categories.append(category)
 
-                                # Cleanup temporary files
-                                cleanup_files([temp_filepath])
-                                flash('YouTube video successfully archived!', 'success')
-                                return redirect(url_for('index'))
-                            else:
-                                cleanup_files([temp_filepath, original_filepath, web_filepath])
-                                flash('Error generating thumbnail', 'error')
+                            db.session.add(video)
+                            db.session.commit()
+                            flash('YouTube video successfully archived!', 'success')
+                            return redirect(url_for('index'))
                         else:
-                            cleanup_files([temp_filepath, original_filepath])
-                            flash('Error creating web version', 'error')
+                            cleanup_files([original_filepath, web_filepath])
+                            flash('Error generating thumbnail', 'error')
                     else:
-                        cleanup_files([temp_filepath])
-                        flash('Error processing video', 'error')
-
-                except Exception as e:
-                    logging.error(f"YouTube processing error: {str(e)}")
-                    logging.error(f"Error type: {type(e).__name__}", exc_info=True)
-                    cleanup_files([temp_filepath])
-                    flash('Error processing video', 'error')
-
-                return redirect(url_for('index'))
+                        cleanup_files([original_filepath])
+                        flash('Error creating web version', 'error')
 
             except Exception as e:
-                logging.error(f"Error: {str(e)}")
-                flash('An unexpected error occurred', 'error')
-                return redirect(url_for('index'))
+                logging.error(f"YouTube error: {str(e)}")
+                flash('Error downloading video', 'error')
+
+            return redirect(url_for('index'))
 
         elif request.files:
             # Handle multiple file uploads
@@ -808,20 +787,20 @@ def check_and_sync_video_files():
                         logging.error(f"Failed to generate web version for video {video.id}")
 
                 # If web exists but original is missing, restore it
-                    if os.path.exists(web_file) and not os.path.exists(original_file):
-                        logging.info(f"Copying web version to original for video {video.id}")
-                        try:
-                            os.makedirs(os.path.dirname(original_file), exist_ok=True)
-                            import shutil
-                            shutil.copy2(web_file, original_file)
-                            logging.info(f"Successfully restored original file: {original_file}")
-                        except Exception as e:
-                            logging.error(f"Error copying web to original for video {video.id}: {str(e)}")
+                if os.path.exists(web_file) and not os.path.exists(original_file):
+                    logging.info(f"Copying web version to original for video {video.id}")
+                    try:
+                        os.makedirs(os.path.dirname(original_file), exist_ok=True)
+                        import shutil
+                        shutil.copy2(web_file, original_file)
+                        logging.info(f"Successfully restored original file: {original_file}")
+                    except Exception as e:
+                        logging.error(f"Error copying web to original for video {video.id}: {str(e)}")
 
             db.session.commit()
 
     except Exception as e:
-        logging.error(f"Error in check_and_sync_video_files: {str(e)}")
+        logging.error(f"Error in check_and_syncvideo_files: {str(e)}")
         db.session.rollback()
 
 def start_background_sync():
@@ -829,8 +808,7 @@ def start_background_sync():
     def run_periodic_check():
         while True:
             with app.app_context():
-                check_and_sync_video_files()
-            time.sleep(60)  # Wait for 1 minute
+                check_and_sync_video_files()            time.sleep(60)  # Wait for 1 minute
 
     sync_thread = threading.Thread(target=run_periodic_check, daemon=True)
     sync_thread.start()
