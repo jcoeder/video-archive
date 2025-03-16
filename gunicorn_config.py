@@ -1,0 +1,9 @@
+timeout = 1800  # 30 minutes
+workers = 2
+worker_class = 'sync'
+bind = '0.0.0.0:5000'
+keepalive = 120
+worker_tmp_dir = '/dev/shm'  # Use memory for temp files
+max_requests = 1000
+max_requests_jitter = 50
+graceful_timeout = 300

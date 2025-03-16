@@ -183,20 +183,17 @@ def transcode_video(input_path, output_path):
         cmd = [
             'ffmpeg', '-i', input_path,
             '-c:v', 'libx264',  # Video codec
-            '-preset', 'medium',  # Encoding speed preset
-            '-crf', '23',  # Quality (23 is a good balance)
+            '-preset', 'ultrafast',  # Fastest encoding speed
+            '-crf', '28',  # Lower quality for faster encoding
             '-c:a', 'aac',  # Audio codec
             '-b:a', '128k',  # Audio bitrate
             '-movflags', '+faststart',  # Enable streaming
-            '-map_metadata', '0',  # Copy metadata
-            '-metadata', 'encoding_tool=ffmpeg',  # Add encoding tool info
             '-y',  # Overwrite output file if exists
             output_path
         ]
 
-        # Run FFmpeg with detailed logging
-        logging.info(f"Starting video transcoding: {input_path} -> {output_path}")
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        # Run FFmpeg with timeout
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)  # 10 minute timeout
 
         if result.returncode != 0:
             logging.error(f"Transcoding failed: {result.stderr}")
@@ -209,6 +206,9 @@ def transcode_video(input_path, output_path):
 
         logging.info("Video transcoding completed successfully")
         return True
+    except subprocess.TimeoutExpired:
+        logging.error("Transcoding timed out after 10 minutes")
+        return False
     except Exception as e:
         logging.error(f"Error transcoding video: {str(e)}")
         return False
