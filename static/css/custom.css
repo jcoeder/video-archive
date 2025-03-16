@@ -13,19 +13,13 @@
     border-color: var(--bs-primary);
 }
 
-.dropzone .dz-message {
-    text-align: center;
-    margin: 2em 0;
-    color: var(--bs-gray-500);
-}
-
 .dropzone .dz-preview {
     background: var(--bs-dark) !important;
     border: 1px solid var(--bs-gray-700);
     border-radius: 4px;
     padding: 15px;
     margin: 10px;
-    width: 250px;
+    width: 180px;
     display: inline-block;
     vertical-align: top;
     text-align: center;
@@ -35,32 +29,28 @@
     background: transparent !important;
 }
 
-.dropzone .dz-preview .dz-details {
-    color: var(--bs-gray-400);
-    margin-bottom: 10px;
-}
-
-.dropzone .dz-preview .dz-filename {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-bottom: 8px;
+.dropzone .dz-filename {
     color: var(--bs-gray-300);
 }
 
-.dropzone .dz-preview .dz-size {
-    color: var(--bs-gray-500);
-    margin-bottom: 8px;
+.dropzone .dz-preview-icon {
+    color: var(--bs-gray-400);
+    transition: color 0.2s ease;
 }
 
-.dropzone .dz-preview .dz-progress {
+.dropzone .dz-preview:hover .dz-preview-icon {
+    color: var(--bs-primary);
+}
+
+.dropzone .dz-progress {
     height: 4px;
     background: var(--bs-gray-700) !important;
-    margin: 10px 0;
+    margin: 10px auto;
     border-radius: 2px;
+    width: 80%;
 }
 
-.dropzone .dz-preview .dz-progress .dz-upload {
+.dropzone .dz-progress .dz-upload {
     background: var(--bs-primary) !important;
     height: 100%;
     border-radius: 2px;
@@ -75,24 +65,26 @@
 
 .dropzone .dz-preview.dz-success .dz-success-mark {
     display: block;
-    color: var(--bs-success);
 }
 
 .dropzone .dz-preview.dz-error .dz-error-mark {
     display: block;
-    color: var(--bs-danger);
 }
 
 .dropzone .dz-preview .dz-error-message {
     display: none;
-    color: var(--bs-danger);
-    margin-top: 8px;
-    font-size: 0.875rem;
 }
 
 .dropzone .dz-preview.dz-error .dz-error-message {
     display: block;
 }
+
+.dropzone .dz-message {
+    text-align: center;
+    margin: 2em 0;
+    color: var(--bs-gray-500);
+}
+
 
 /* Video card and preview styles */
 .video-card {
