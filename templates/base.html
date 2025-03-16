@@ -21,7 +21,7 @@
             <div class="collapse navbar-collapse" id="navbarContent">
                 <ul class="navbar-nav ms-auto">
                     {% if current_user.is_admin %}
-                    <li class="nav-item">
+                    <li class="nav-item me-3">
                         <a class="nav-link" href="{{ url_for('admin') }}">
                             <i class="bi bi-shield-lock"></i> Admin Portal
                         </a>
@@ -33,13 +33,13 @@
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li>
-                                <a class="dropdown-item" href="{{ url_for('change_password') }}">
+                                <a class="dropdown-item text-end" href="{{ url_for('change_password') }}">
                                     <i class="bi bi-key"></i> Change Password
                                 </a>
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
-                                <a class="dropdown-item" href="{{ url_for('logout') }}">
+                                <a class="dropdown-item text-end" href="{{ url_for('logout') }}">
                                     <i class="bi bi-box-arrow-right"></i> Logout
                                 </a>
                             </li>

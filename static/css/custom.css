@@ -1,5 +1,18 @@
 /* Minimal custom styles to complement Bootstrap */
 
+/* Navbar and dropdown styles */
+.navbar .dropdown-menu {
+    position: absolute;
+    z-index: 1000;
+    margin-top: 0;
+}
+
+.navbar .dropdown-menu-end {
+    right: 0;
+    left: auto;
+    text-align: right;
+}
+
 /* Video card and preview styles */
 .video-card {
     transition: transform 0.2s;
@@ -55,7 +68,6 @@
     font-size: 4rem;
     color: white;
 }
-
 
 .loading-overlay {
     position: fixed;
