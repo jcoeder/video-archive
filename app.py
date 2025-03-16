@@ -72,6 +72,29 @@ def load_user(id):
     from models import User
     return User.query.get(int(id))
 
+def cleanup_unused_thumbnails():
+    """Clean up thumbnails that don't have corresponding video entries"""
+    try:
+        from models import Video
+        with app.app_context():
+            # Get all thumbnail paths from the database
+            db_thumbnails = set(v.thumbnail_path for v in Video.query.all() if v.thumbnail_path)
+
+            # Scan thumbnail directory
+            for user_dir in os.listdir(THUMBNAIL_FOLDER):
+                user_thumb_dir = os.path.join(THUMBNAIL_FOLDER, user_dir)
+                if os.path.isdir(user_thumb_dir):
+                    for thumb in os.listdir(user_thumb_dir):
+                        thumb_path = f"thumbnails/{user_dir}/{thumb}"
+                        if thumb_path not in db_thumbnails:
+                            try:
+                                os.remove(os.path.join('static', thumb_path))
+                                logging.info(f"Removed unused thumbnail: {thumb_path}")
+                            except Exception as e:
+                                logging.error(f"Error removing thumbnail {thumb_path}: {str(e)}")
+    except Exception as e:
+        logging.error(f"Error in cleanup_unused_thumbnails: {str(e)}")
+
 def scan_video_directory():
     """Scan upload directory and update database"""
     from models import Video, User
@@ -94,22 +117,38 @@ def scan_video_directory():
                                 filepath = os.path.join('uploads', str(user.id), filename)
                                 existing_video = Video.query.filter_by(file_path=filepath).first()
                                 if not existing_video:
-                                    # Create thumbnail
-                                    thumbnail_filename = f"{os.path.splitext(filename)[0]}_{int(time.time())}_thumb.jpg"
-                                    thumbnail_path = os.path.join(get_user_thumbnail_folder(user.id), thumbnail_filename)
-                                    if generate_thumbnail(os.path.join(user_upload_dir, filename), thumbnail_path):
-                                        video = Video(
-                                            title=os.path.splitext(filename)[0],
-                                            file_path=filepath,
-                                            thumbnail_path=f"thumbnails/{user.id}/{thumbnail_filename}",
-                                            date_archived=datetime.now(),
-                                            user_id=user.id
-                                        )
-                                        db.session.add(video)
+                                    try:
+                                        # Create thumbnail with timestamp to ensure uniqueness
+                                        thumbnail_filename = f"{os.path.splitext(filename)[0]}_{int(time.time())}_thumb.jpg"
+                                        thumbnail_path = os.path.join(get_user_thumbnail_folder(user.id), thumbnail_filename)
+
+                                        if generate_thumbnail(os.path.join(user_upload_dir, filename), thumbnail_path):
+                                            video = Video(
+                                                title=os.path.splitext(filename)[0],
+                                                file_path=filepath,
+                                                thumbnail_path=f"thumbnails/{user.id}/{thumbnail_filename}",
+                                                date_archived=datetime.now(),
+                                                user_id=user.id
+                                            )
+                                            db.session.add(video)
+                                            logging.info(f"Added new video: {filepath}")
+                                        else:
+                                            logging.error(f"Failed to generate thumbnail for {filepath}")
+                                    except Exception as e:
+                                        logging.error(f"Error processing new video {filepath}: {str(e)}")
+                                        continue
 
                 db.session.commit()
+
+                # Clean up unused thumbnails
+                cleanup_unused_thumbnails()
+
             except Exception as e:
                 logging.error(f"Error in scan_video_directory: {str(e)}")
+                try:
+                    db.session.rollback()
+                except:
+                    pass
 
         time.sleep(300)  # Check every 5 minutes
 
@@ -264,6 +303,9 @@ def upload_video():
                 original_filename = secure_filename(file.filename)
                 user_upload_folder = get_user_upload_folder(current_user.id)
                 original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
+
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(original_filepath), exist_ok=True)
                 file.save(original_filepath)
 
                 # Transcode to web-compatible format
@@ -271,73 +313,107 @@ def upload_video():
                 final_filepath = os.path.join(user_upload_folder, final_filename)
 
                 if transcode_video(original_filepath, final_filepath):
-                    # Generate thumbnail from transcoded video
-                    thumbnail_filename = f"{os.path.splitext(final_filename)[0]}_thumb.jpg"
+                    # Generate thumbnail with timestamp
+                    thumbnail_filename = f"{os.path.splitext(final_filename)[0]}_{int(time.time())}_thumb.jpg"
                     thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user.id), thumbnail_filename)
-                    generate_thumbnail(final_filepath, thumbnail_path)
 
-                    video = Video(
-                        title=os.path.splitext(original_filename)[0],
-                        file_path=f"uploads/{current_user.id}/{final_filename}",  # Store relative path
-                        thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",  # Store relative path
-                        notes=notes,
-                        date_archived=datetime.now(),
-                        user_id=current_user.id #added user_id
-                    )
+                    if generate_thumbnail(final_filepath, thumbnail_path):
+                        video = Video(
+                            title=os.path.splitext(original_filename)[0],
+                            file_path=f"uploads/{current_user.id}/{final_filename}",
+                            thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",
+                            notes=notes,
+                            date_archived=datetime.now(),
+                            user_id=current_user.id
+                        )
 
-                    # Clean up original file
-                    os.remove(original_filepath)
+                        # Add categories
+                        for category_id in categories:
+                            category = Category.query.get(category_id)
+                            if category and category.user_id == current_user.id:
+                                video.categories.append(category)
+
+                        db.session.add(video)
+                        db.session.commit()
+
+                        # Clean up original file
+                        try:
+                            os.remove(original_filepath)
+                        except Exception as e:
+                            logging.error(f"Error removing original file: {str(e)}")
+
+                        flash('Video successfully archived!', 'success')
+                    else:
+                        flash('Error generating thumbnail', 'error')
+                        return redirect(url_for('index'))
                 else:
                     flash('Error processing video file', 'error')
                     return redirect(url_for('index'))
 
         elif 'youtube_url' in request.form:
             url = request.form['youtube_url']
-            yt = YouTube(url)
-            stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
-            original_filename = secure_filename(yt.title + '.mp4')
-            user_upload_folder = get_user_upload_folder(current_user.id)
-            original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
-            stream.download(filename=original_filepath)
+            try:
+                yt = YouTube(url)
+                stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
 
-            # Transcode YouTube video
-            final_filename = f"web_{original_filename}"
-            final_filepath = os.path.join(user_upload_folder, final_filename)
+                original_filename = secure_filename(yt.title + '.mp4')
+                user_upload_folder = get_user_upload_folder(current_user.id)
+                original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
 
-            if transcode_video(original_filepath, final_filepath):
-                # Generate thumbnail for YouTube video
-                thumbnail_filename = f"{os.path.splitext(final_filename)[0]}_thumb.jpg"
-                thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user.id), thumbnail_filename)
-                generate_thumbnail(final_filepath, thumbnail_path)
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(original_filepath), exist_ok=True)
+                stream.download(filename=original_filepath)
 
-                video = Video(
-                    title=yt.title,
-                    file_path=f"uploads/{current_user.id}/{final_filename}",  # Store relative path
-                    thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",  # Store relative path
-                    notes=notes,
-                    date_archived=datetime.now(),
-                    user_id=current_user.id #added user_id
-                )
+                # Transcode YouTube video
+                final_filename = f"web_{original_filename}"
+                final_filepath = os.path.join(user_upload_folder, final_filename)
 
-                # Clean up original file
-                os.remove(original_filepath)
-            else:
-                flash('Error processing YouTube video', 'error')
+                if transcode_video(original_filepath, final_filepath):
+                    # Generate thumbnail with timestamp
+                    thumbnail_filename = f"{os.path.splitext(final_filename)[0]}_{int(time.time())}_thumb.jpg"
+                    thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user.id), thumbnail_filename)
+
+                    if generate_thumbnail(final_filepath, thumbnail_path):
+                        video = Video(
+                            title=yt.title,
+                            file_path=f"uploads/{current_user.id}/{final_filename}",
+                            thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",
+                            notes=notes,
+                            date_archived=datetime.now(),
+                            user_id=current_user.id
+                        )
+
+                        # Add categories
+                        for category_id in categories:
+                            category = Category.query.get(category_id)
+                            if category and category.user_id == current_user.id:
+                                video.categories.append(category)
+
+                        db.session.add(video)
+                        db.session.commit()
+
+                        # Clean up original file
+                        try:
+                            os.remove(original_filepath)
+                        except Exception as e:
+                            logging.error(f"Error removing original file: {str(e)}")
+
+                        flash('Video successfully archived!', 'success')
+                    else:
+                        flash('Error generating thumbnail', 'error')
+                        return redirect(url_for('index'))
+                else:
+                    flash('Error processing YouTube video', 'error')
+                    return redirect(url_for('index'))
+            except Exception as e:
+                logging.error(f"Error downloading YouTube video: {str(e)}")
+                flash('Error downloading YouTube video. Please try again.', 'error')
                 return redirect(url_for('index'))
-
-        # Add categories
-        for category_id in categories:
-            category = Category.query.get(category_id)
-            if category:
-                video.categories.append(category)
-
-        db.session.add(video)
-        db.session.commit()
-        flash('Video successfully archived!', 'success')
 
     except Exception as e:
         logging.error(f"Error uploading video: {str(e)}")
         flash('Error uploading video. Please try again.', 'error')
+        db.session.rollback()
 
     return redirect(url_for('index'))
 
