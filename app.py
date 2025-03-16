@@ -15,6 +15,9 @@ import urllib.parse
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from forms import LoginForm, RegisterForm, ChangePasswordForm, AdminUserCreateForm  # Added AdminUserCreateForm import
 
+def allowed_file(filename):
+    """Check if a filename has an allowed extension"""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def calculate_file_hash(file_path):
     """Calculate SHA-256 hash of a file"""
