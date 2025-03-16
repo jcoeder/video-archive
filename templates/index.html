@@ -67,7 +67,7 @@
                         <div class="dropzone-container mb-4">
                             <form id="uploadForm" action="{{ url_for('upload_video') }}" method="post" class="dropzone">
                                 {{ form.csrf_token }}
-                                <div class="dz-default dz-message">
+                                <div class="dz-message">
                                     <div class="upload-message">
                                         <div class="upload-icon mb-3">
                                             <i class="bi bi-cloud-arrow-up display-1"></i>
@@ -164,6 +164,7 @@ const myDropzone = new Dropzone("#uploadForm", {
     addRemoveLinks: false,
     createImageThumbnails: false,
     previewsContainer: ".dz-preview-files",
+    clickable: true,
     previewTemplate: `
         <div class="dz-preview">
             <div class="dz-filename mb-2">
@@ -244,6 +245,11 @@ function processUploads() {
 // Dropzone event handlers
 myDropzone.on("addedfile", function(file) {
     document.getElementById('overall-upload-status').classList.remove('d-none');
+    // Hide the message after the first file is added
+    const message = document.querySelector('.dz-message');
+    if (message) {
+        message.style.display = 'none';
+    }
 });
 
 myDropzone.on("totaluploadprogress", function(progress) {
