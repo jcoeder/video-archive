@@ -70,6 +70,14 @@
                             </form>
                         </div>
 
+                        <div id="upload-progress-container" class="d-none">
+                            <h6 class="mb-3">Upload Progress</h6>
+                            <div class="upload-progress-bar">
+                                <div class="progress" style="width: 0%"></div>
+                            </div>
+                            <div id="upload-status" class="small text-muted mt-2"></div>
+                        </div>
+
                         <hr class="my-4">
 
                         <h6>YouTube Video</h6>
@@ -105,9 +113,6 @@
                                 <span class="visually-hidden">Loading...</span>
                             </span>
                         </button>
-                        <div class="mt-4">
-
-                        </div>
                     </div>
                 </div>
             </div>
@@ -157,12 +162,6 @@ const myDropzone = new Dropzone("#uploadForm", {
                     Remove file
                 </button>
             </div>
-            <div class="dz-progress mt-2">
-                <span class="dz-upload" data-dz-uploadprogress></span>
-            </div>
-            <div class="dz-success-mark mt-2"><i class="bi bi-check-circle-fill text-success"></i></div>
-            <div class="dz-error-mark mt-2"><i class="bi bi-x-circle-fill text-danger"></i></div>
-            <div class="dz-error-message text-danger small mt-2"><span data-dz-errormessage></span></div>
         </div>
     `,
     dictDefaultMessage: `

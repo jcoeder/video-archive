@@ -67,47 +67,30 @@
 }
 
 .dropzone .dz-remove-container {
-    text-align: left;
+    text-align: center;
     margin-bottom: 0.5rem;
 }
 
-.dropzone .dz-progress {
+/* Upload progress styles moved outside dropzone */
+#upload-progress-container {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--bs-dark);
+    border-radius: 6px;
+}
+
+.upload-progress-bar {
     height: 4px;
-    background: var(--bs-gray-700) !important;
+    background: var(--bs-gray-700);
     border-radius: 2px;
-    width: 100%;
+    margin: 0.5rem 0;
     overflow: hidden;
-    margin-top: 0.5rem;
 }
 
-.dropzone .dz-progress .dz-upload {
-    background: var(--bs-primary) !important;
+.upload-progress-bar .progress {
     height: 100%;
-    border-radius: 2px;
+    background: var(--bs-primary);
     transition: width 0.3s ease-in-out;
-}
-
-.dropzone .dz-preview .dz-success-mark,
-.dropzone .dz-preview .dz-error-mark {
-    display: none;
-    text-align: left;
-}
-
-.dropzone .dz-preview.dz-success .dz-success-mark {
-    display: block;
-}
-
-.dropzone .dz-preview.dz-error .dz-error-mark {
-    display: block;
-}
-
-.dropzone .dz-preview .dz-error-message {
-    display: none;
-    text-align: left;
-}
-
-.dropzone .dz-preview.dz-error .dz-error-message {
-    display: block;
 }
 
 /* Video card and preview styles */
