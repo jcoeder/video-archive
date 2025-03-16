@@ -538,13 +538,18 @@ def admin_create_user():
 
         user = User(
             username=form.username.data,
-            email=form.email.data,
+            email=form.email.data or None,  # Convert empty string to None
             is_admin=form.is_admin.data
         )
         user.set_password(form.password.data)
         db.session.add(user)
-        db.session.commit()
-        flash(f'User {form.username.data} created successfully!', 'success')
+        try:
+            db.session.commit()
+            flash(f'User {form.username.data} created successfully!', 'success')
+        except Exception as e:
+            logger.error(f"Error creating user: {str(e)}")
+            db.session.rollback()
+            flash('Error creating user. Please try again.', 'danger')
     return redirect(url_for('admin'))
 
 @app.route('/admin')
