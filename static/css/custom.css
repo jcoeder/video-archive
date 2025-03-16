@@ -83,6 +83,36 @@
     z-index: 1;
 }
 
+/* Update video-card to content-card */
+.content-card {
+    transition: transform 0.2s;
+    position: relative;
+    overflow: visible;
+}
+
+.content-card:hover {
+    transform: translateY(-2px);
+}
+
+.content-thumbnail {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    background-color: var(--bs-dark);
+    position: relative;
+}
+
+.content-preview {
+    display: none;
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}
+
 /* Card content should always be visible */
 .card-body {
     position: relative;
@@ -105,6 +135,25 @@
 }
 
 .missing-video-overlay i {
+    font-size: 4rem;
+    color: white;
+}
+
+/* Missing content overlay */
+.missing-content-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 200px;
+    background-color: rgba(var(--bs-danger-rgb), 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+}
+
+.missing-content-overlay i {
     font-size: 4rem;
     color: white;
 }

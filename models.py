@@ -4,8 +4,8 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 
-video_categories = db.Table('video_categories',
-    db.Column('video_id', db.Integer, db.ForeignKey('video.id'), primary_key=True),
+content_categories = db.Table('content_categories',
+    db.Column('content_id', db.Integer, db.ForeignKey('content.id'), primary_key=True),
     db.Column('category_id', db.Integer, db.ForeignKey('category.id'), primary_key=True)
 )
 
@@ -17,7 +17,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256))
     is_admin = db.Column(db.Boolean, default=False)
     categories = db.relationship('Category', backref='user', lazy=True)
-    videos = db.relationship('Video', backref='user', lazy=True)
+    content = db.relationship('Content', backref='user', lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -29,18 +29,22 @@ class User(UserMixin, db.Model):
         """Get the user's storage path using UUID"""
         return str(self.uuid if self.id != 1 else self.id)
 
-class Video(db.Model):
+class Content(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
+    content_type = db.Column(db.String(10), nullable=False)  # 'video' or 'photo'
     file_path = db.Column(db.String(500), nullable=False)
     thumbnail_path = db.Column(db.String(500))
     notes = db.Column(db.Text)
     date_archived = db.Column(db.DateTime, default=datetime.utcnow)
-    exists = db.Column(db.Boolean, default=True)  # Track if video file exists
+    exists = db.Column(db.Boolean, default=True)  # Track if file exists
     file_hash = db.Column(db.String(64))  # Store SHA-256 hash of file
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    categories = db.relationship('Category', secondary=video_categories, lazy='subquery',
-        backref=db.backref('videos', lazy=True))
+    is_published = db.Column(db.Boolean, default=False)  # New: publishing status
+    publish_date = db.Column(db.DateTime)  # New: when the content was published
+    global_uri = db.Column(db.String(200), unique=True)  # New: URI for published content
+    categories = db.relationship('Category', secondary=content_categories, lazy='subquery',
+        backref=db.backref('content', lazy=True))
 
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)

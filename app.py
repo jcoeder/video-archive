@@ -14,6 +14,7 @@ from pytube import YouTube
 import urllib.parse
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from forms import LoginForm, RegisterForm, ChangePasswordForm, AdminUserCreateForm  # Added AdminUserCreateForm import
+import shutil
 
 def allowed_file(filename):
     """Check if a filename has an allowed extension"""
@@ -65,7 +66,7 @@ login_manager.login_view = 'login'
 # Configure upload settings
 UPLOAD_FOLDER = 'static/uploads'
 THUMBNAIL_FOLDER = 'static/thumbnails'
-ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm'}
+ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm', 'jpg', 'jpeg', 'png'} #added image extensions
 
 def get_user_upload_folder(user):
     """Get user-specific upload folder path using UUID"""
@@ -191,7 +192,7 @@ def generate_thumbnail(video_path, output_path):
 def login():
     try:
         if current_user.is_authenticated:
-            return redirect(url_for('index'))
+            return redirect(url_for('home'))
 
         form = LoginForm()
         if form.validate_on_submit():
@@ -202,7 +203,7 @@ def login():
                 return redirect(url_for('login'))
 
             login_user(user)
-            return redirect(url_for('index'))
+            return redirect(url_for('home'))
 
         return render_template('login.html', form=form)
     except Exception as e:
@@ -214,7 +215,7 @@ def login():
 def register():
     try:
         if current_user.is_authenticated:
-            return redirect(url_for('index'))
+            return redirect(url_for('home'))
 
         form = RegisterForm()
         if form.validate_on_submit():
@@ -243,39 +244,81 @@ def register():
 @app.route('/logout')
 def logout():
     logout_user()
-    return redirect(url_for('index'))
+    return redirect(url_for('home'))
 
 @app.route('/')
+def home():
+    """Home page showing published content"""
+    from models import Content
+    published_content = Content.query.filter_by(is_published=True)\
+        .order_by(Content.publish_date.desc()).all()
+    return render_template('home.html', published_content=published_content)
+
+@app.route('/my-library')
 @login_required
-def index():
-    from models import Video, Category
-    # Remove admin override - all users only see their own videos
-    videos = Video.query.filter_by(user_id=current_user.id).order_by(Video.date_archived.desc()).all()
-    categories = Category.query.filter_by(user_id=current_user.id).order_by(Category.name).all()
-    return render_template('index.html', videos=videos, categories=categories)
+def my_library():
+    """User's content library"""
+    from models import Content, Category
+    content = Content.query.filter_by(user_id=current_user.id)\
+        .order_by(Content.date_archived.desc()).all()
+    categories = Category.query.filter_by(user_id=current_user.id)\
+        .order_by(Category.name).all()
+    return render_template('index.html', content=content, categories=categories)
+
+
+@app.route('/content/publish/<int:content_id>', methods=['POST'])
+@login_required
+def toggle_publish(content_id):
+    """Toggle publish status of content"""
+    from models import Content
+    content = Content.query.get_or_404(content_id)
+
+    if content.user_id != current_user.id and not current_user.is_admin:
+        flash('Access denied.', 'danger')
+        return redirect(url_for('my_library'))
+
+    try:
+        content.is_published = not content.is_published
+        if content.is_published:
+            content.publish_date = datetime.now()
+            # Generate a global URI for published content
+            content.global_uri = f"/cdn/{content.id}/{secure_filename(content.title)}"
+        else:
+            content.publish_date = None
+            content.global_uri = None
+
+        db.session.commit()
+        flash(f'Content {"published" if content.is_published else "unpublished"} successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating publish status: {str(e)}', 'danger')
+
+    return redirect(url_for('my_library'))
 
 @app.route('/upload', methods=['POST'])
 @login_required
-def upload_video():
-    from models import Video, Category
+def upload_content():
+    """Handle content upload (both videos and photos)"""
+    from models import Content, Category
 
-    if 'video' not in request.files and 'youtube_url' not in request.form:
-        flash('No video file or YouTube URL provided', 'error')
-        return redirect(url_for('index'))
+    if 'file' not in request.files and 'youtube_url' not in request.form:
+        flash('No file or YouTube URL provided', 'error')
+        return redirect(url_for('my_library'))
 
+    content_type = request.form.get('content_type', 'video')
     categories = request.form.getlist('categories')
     notes = request.form.get('notes', '')
 
     try:
-        if 'video' in request.files:
-            file = request.files['video']
-            if file and allowed_file(file.filename):
+        if 'file' in request.files:
+            file = request.files['file']
+            if file:
                 original_filename = secure_filename(file.filename)
                 user_upload_folder = get_user_upload_folder(current_user)
 
                 # Save original file
                 original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
-                web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
+                web_filename = f"web_{os.path.splitext(original_filename)[0]}.{content_type}"
                 web_filepath = os.path.join(user_upload_folder, web_filename)
 
                 os.makedirs(os.path.dirname(original_filepath), exist_ok=True)
@@ -285,25 +328,34 @@ def upload_video():
                 file_hash = calculate_file_hash(original_filepath)
                 if file_hash:
                     # Check for duplicates
-                    duplicate = check_duplicate_video(file_hash, current_user.id)
+                    duplicate = Content.query.filter_by(file_hash=file_hash, user_id=current_user.id).first()
                     if duplicate:
                         try:
                             os.remove(original_filepath)
                         except Exception as e:
                             logging.error(f"Error removing duplicate file: {str(e)}")
-                        flash('This video has already been uploaded.', 'warning')
-                        return redirect(url_for('video_detail', video_id=duplicate.id))
+                        flash('This content has already been uploaded.', 'warning')
+                        return redirect(url_for('content_detail', content_id=duplicate.id))
 
-                # Create web-optimized version
-                if transcode_video(original_filepath, web_filepath):
+                success = False
+                if content_type == 'video':
+                    # Create web-optimized version for videos
+                    success = transcode_video(original_filepath, web_filepath)
+                else:
+                    # For photos, just copy the file
+                    shutil.copy2(original_filepath, web_filepath)
+                    success = True
+
+                if success:
                     # Generate thumbnail
-                    thumbnail_filename = f"video_{int(time.time())}_thumb.jpg"
+                    thumbnail_filename = f"content_{int(time.time())}_thumb.jpg"
                     thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
 
                     if generate_thumbnail(web_filepath, thumbnail_path):
                         # Create database record
-                        video = Video(
+                        content = Content(
                             title=os.path.splitext(original_filename)[0],
+                            content_type=content_type,
                             file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",
                             thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
                             notes=notes,
@@ -317,11 +369,11 @@ def upload_video():
                         for category_id in categories:
                             category = Category.query.get(category_id)
                             if category and category.user_id == current_user.id:
-                                video.categories.append(category)
+                                content.categories.append(category)
 
-                        db.session.add(video)
+                        db.session.add(content)
                         db.session.commit()
-                        flash('Video successfully uploaded!', 'success')
+                        flash('Content successfully uploaded!', 'success')
                     else:
                         try:
                             os.remove(original_filepath)
@@ -334,9 +386,9 @@ def upload_video():
                         os.remove(original_filepath)
                     except Exception as e:
                         logging.error(f"Error cleaning up original file: {str(e)}")
-                    flash('Error processing video file', 'error')
+                    flash('Error processing file', 'error')
 
-        elif 'youtube_url' in request.form:
+        elif 'youtube_url' in request.form and content_type == 'video':
             url = request.form['youtube_url']
             try:
                 yt = YouTube(url)
@@ -354,7 +406,7 @@ def upload_video():
                 file_hash = calculate_file_hash(original_filepath)
                 if file_hash:
                     # Check for duplicates
-                    duplicate = check_duplicate_video(file_hash, current_user.id)
+                    duplicate = Content.query.filter_by(file_hash=file_hash, user_id=current_user.id).first()
                     if duplicate:
                         # Clean up the uploaded file
                         try:
@@ -362,7 +414,7 @@ def upload_video():
                         except Exception as e:
                             logging.error(f"Error removing duplicate file: {str(e)}")
                         flash('This video has already been uploaded.', 'warning')
-                        return redirect(url_for('video_detail', video_id=duplicate.id))
+                        return redirect(url_for('content_detail', content_id=duplicate.id))
 
                 # Create web-optimized version
                 web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
@@ -374,8 +426,9 @@ def upload_video():
                     thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
 
                     if generate_thumbnail(web_filepath, thumbnail_path):
-                        video = Video(
+                        content = Content(
                             title=yt.title,
+                            content_type='video',
                             file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",  # Store web version path
                             thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
                             notes=notes,
@@ -388,9 +441,9 @@ def upload_video():
                         for category_id in categories:
                             category = Category.query.get(category_id)
                             if category and category.user_id == current_user.id:
-                                video.categories.append(category)
+                                content.categories.append(category)
 
-                        db.session.add(video)
+                        db.session.add(content)
                         db.session.commit()
 
                         flash('Video successfully archived!', 'success')
@@ -402,7 +455,7 @@ def upload_video():
                         except Exception as e:
                             logging.error(f"Error cleaning up files: {str(e)}")
                         flash('Error generating thumbnail', 'error')
-                        return redirect(url_for('index'))
+                        return redirect(url_for('my_library'))
                 else:
                     # Clean up original file on transcoding failure
                     try:
@@ -410,69 +463,70 @@ def upload_video():
                     except Exception as e:
                         logging.error(f"Error cleaning up original file: {str(e)}")
                     flash('Error processing YouTube video', 'error')
-                    return redirect(url_for('index'))
+                    return redirect(url_for('my_library'))
 
             except Exception as e:
                 logging.error(f"Error downloading YouTube video: {str(e)}")
                 flash('Error downloading YouTube video. Please try again.', 'error')
-                return redirect(url_for('index'))
+                return redirect(url_for('my_library'))
 
     except Exception as e:
-        logging.error(f"Error uploading video: {str(e)}")
-        flash('Error uploading video. Please try again.', 'error')
+        logging.error(f"Error uploading content: {str(e)}")
+        flash('Error uploading content. Please try again.', 'error')
         db.session.rollback()
 
-    return redirect(url_for('index'))
+    return redirect(url_for('my_library'))
 
-@app.route('/video/<int:video_id>', methods=['GET', 'POST'])
+@app.route('/content/<int:content_id>', methods=['GET', 'POST'])
 @login_required
-def video_detail(video_id):
-    from models import Video, Category
-    video = Video.query.get_or_404(video_id)
+def content_detail(content_id):
+    from models import Content, Category
+    content = Content.query.get_or_404(content_id)
 
-    # Ensure user owns the video or is admin
-    if video.user_id != current_user.id and not current_user.is_admin:
+    # Ensure user owns the content or is admin
+    if content.user_id != current_user.id and not current_user.is_admin:
         flash('Access denied.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('my_library'))
 
-    # Only show categories belonging to the video owner
-    categories = Category.query.filter_by(user_id=video.user_id).order_by(Category.name).all()
+    # Only show categories belonging to the content owner
+    categories = Category.query.filter_by(user_id=content.user_id).order_by(Category.name).all()
 
     if request.method == 'POST':
-        if video.user_id != current_user.id and not current_user.is_admin:
+        if content.user_id != current_user.id and not current_user.is_admin:
             flash('Access denied.', 'danger')
-            return redirect(url_for('index'))
+            return redirect(url_for('my_library'))
 
-        video.notes = request.form.get('notes', '')
-        video.categories = []
+        content.notes = request.form.get('notes', '')
+        content.categories = []
         for category_id in request.form.getlist('categories'):
             category = Category.query.get(category_id)
-            if category and category.user_id == video.user_id:
-                video.categories.append(category)
+            if category and category.user_id == content.user_id:
+                content.categories.append(category)
         db.session.commit()
         if request.headers.get('Content-Type') == 'application/x-www-form-urlencoded':
             # AJAX request
             return jsonify({'success': True})
-        flash('Video details updated successfully!', 'success')
-        return redirect(url_for('video_detail', video_id=video_id))
+        flash('Content details updated successfully!', 'success')
+        return redirect(url_for('content_detail', content_id=content_id))
 
-    return render_template('video.html', video=video, categories=categories)
+    return render_template('video.html', content=content, categories=categories) #updated template name
 
-@app.route('/video/delete/<int:video_id>', methods=['POST'])
+
+@app.route('/content/delete/<int:content_id>', methods=['POST'])
 @login_required
-def delete_video(video_id):
-    from models import Video
-    video = Video.query.get_or_404(video_id)
+def delete_content(content_id):
+    from models import Content
+    content = Content.query.get_or_404(content_id)
 
-    # Ensure user owns the video or is admin
-    if video.user_id != current_user.id and not current_user.is_admin:
+    # Ensure user owns the content or is admin
+    if content.user_id != current_user.id and not current_user.is_admin:
         flash('Access denied.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('my_library'))
 
     try:
         # Get base file paths
-        user_upload_dir = os.path.join('static/uploads', str(video.user_id))
-        filename = os.path.basename(video.file_path)
+        user_upload_dir = os.path.join('static/uploads', str(content.user_id))
+        filename = os.path.basename(content.file_path)
 
         # Handle different possible filename patterns
         if filename.startswith('web_'):
@@ -500,8 +554,8 @@ def delete_video(video_id):
                 logging.error(f"Error deleting web file {web_file}: {str(e)}")
 
         # Delete thumbnail if it exists
-        if video.thumbnail_path:
-            thumb_path = os.path.join('static', video.thumbnail_path)
+        if content.thumbnail_path:
+            thumb_path = os.path.join('static', content.thumbnail_path)
             if os.path.exists(thumb_path):
                 try:
                     os.remove(thumb_path)
@@ -510,20 +564,20 @@ def delete_video(video_id):
                     logging.error(f"Error deleting thumbnail {thumb_path}: {str(e)}")
 
         # Delete database entry
-        db.session.delete(video)
+        db.session.delete(content)
         db.session.commit()
-        flash('Video deleted successfully', 'success')
+        flash('Content deleted successfully', 'success')
     except Exception as e:
-        logger.error(f"Error deleting video: {str(e)}")
-        flash(f'Error deleting video: {str(e)}', 'danger')
-    return redirect(url_for('index'))
+        logger.error(f"Error deleting content: {str(e)}")
+        flash(f'Error deleting content: {str(e)}', 'danger')
+    return redirect(url_for('my_library'))
 
 @app.route('/admin/create_user', methods=['POST'])
 @login_required
 def admin_create_user():
     if not current_user.is_admin:
         flash('Access denied. Admin privileges required.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('home'))
 
     form = AdminUserCreateForm()
     if form.validate_on_submit():
@@ -557,7 +611,7 @@ def admin_create_user():
 def admin():
     if not current_user.is_admin:
         flash('Access denied. Admin privileges required.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('home'))
 
     form = AdminUserCreateForm()
     from models import User
@@ -597,7 +651,7 @@ def change_password():
             current_user.set_password(form.new_password.data)
             db.session.commit()
             flash('Your password has been updated!', 'success')
-            return redirect(url_for('index'))
+            return redirect(url_for('home'))
         else:
             flash('Invalid current password', 'danger')
     return render_template('change_password.html', form=form)
@@ -644,7 +698,7 @@ def delete_user(user_id):
         flash('Access denied. Admin privileges required.', 'danger')
         return redirect(url_for('admin'))
 
-    from models import User, Video, Category
+    from models import User, Content, Category
     user = User.query.get_or_404(user_id)
 
     if user.username == 'admin':
@@ -667,23 +721,23 @@ def delete_user(user_id):
                         existing_categories = {cat.name.lower(): cat for cat in transfer_user.categories}
 
                         # First, transfer all videos to new user
-                        videos_to_transfer = Video.query.filter_by(user_id=user.id).all()
-                        for video in videos_to_transfer:
-                            # Store video categories before transfer
-                            video_categories = list(video.categories)
+                        content_to_transfer = Content.query.filter_by(user_id=user.id).all()
+                        for content in content_to_transfer:
+                            # Store content categories before transfer
+                            content_categories = list(content.categories)
 
                             # Clear existing category relationships
-                            video.categories = []
+                            content.categories = []
 
-                            # Update video ownership and paths
-                            video.user_id = transfer_user.id
+                            # Update content ownership and paths
+                            content.user_id = transfer_user.id
 
                             # Get old and new paths for all file types
-                            old_web_path = os.path.join('static', video.file_path)
-                            new_web_path = os.path.join('static', video.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path()))
+                            old_web_path = os.path.join('static', content.file_path)
+                            new_web_path = os.path.join('static', content.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path()))
 
                             # Handle original file paths
-                            filename = os.path.basename(video.file_path)
+                            filename = os.path.basename(content.file_path)
                             if filename.startswith('web_'):
                                 original_filename = f"original_{filename[4:]}"  # Remove 'web_' prefix
                             else:
@@ -693,17 +747,17 @@ def delete_user(user_id):
                             new_original_path = os.path.join('static/uploads', transfer_user.get_storage_path(), original_filename)
 
                             # Update thumbnail paths
-                            if video.thumbnail_path:
-                                old_thumb_path = os.path.join('static', video.thumbnail_path)
-                                new_thumb_path = os.path.join('static', video.thumbnail_path.replace(user.get_storage_path(), transfer_user.get_storage_path()))
-                                video.thumbnail_path = video.thumbnail_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
+                            if content.thumbnail_path:
+                                old_thumb_path = os.path.join('static', content.thumbnail_path)
+                                new_thumb_path = os.path.join('static', content.thumbnail_path.replace(user.get_storage_path(), transfer_user.get_storage_path()))
+                                content.thumbnail_path = content.thumbnail_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
 
-                            # Update video file path
-                            video.file_path = video.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
-                            db.session.add(video)
+                            # Update content file path
+                            content.file_path = content.file_path.replace(user.get_storage_path(), transfer_user.get_storage_path())
+                            db.session.add(content)
 
-                            # Process categories for this video
-                            for old_category in video_categories:
+                            # Process categories for this content
+                            for old_category in content_categories:
                                 transfer_category = existing_categories.get(old_category.name.lower())
                                 if not transfer_category:
                                     # Create new category for transfer user
@@ -714,35 +768,35 @@ def delete_user(user_id):
                                     db.session.add(transfer_category)
                                     existing_categories[transfer_category.name.lower()] = transfer_category
 
-                                # Add video to transfer category
-                                if video not in transfer_category.videos:
-                                    transfer_category.videos.append(video)
+                                # Add content to transfer category
+                                if content not in transfer_category.content:
+                                    transfer_category.content.append(content)
 
-                        # Commit changes to ensure video transfers are saved
+                        # Commit changes to ensure content transfers are saved
                         db.session.commit()
 
                         # Move files after successful database update
                         import shutil
-                        for video in videos_to_transfer:
+                        for content in content_to_transfer:
                             # Get all possible file paths
-                            old_web_path = os.path.join('static', video.file_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
-                            new_web_path = os.path.join('static', video.file_path)
+                            old_web_path = os.path.join('static', content.file_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
+                            new_web_path = os.path.join('static', content.file_path)
 
-                            filename = os.path.basename(video.file_path)
+                            filename = os.path.basename(content.file_path)
                             if filename.startswith('web_'):
                                 original_filename = f"original_{filename[4:]}"
                             else:
                                 original_filename = f"original_{filename}"
 
-                            old_original_path = os.path.join('static/uploads', user.get_storage_path(), original_filename)
+                            oldoriginal_path = os.path.join('static/uploads', user.get_storage_path(), original_filename)
                             new_original_path = os.path.join('static/uploads', transfer_user.get_storage_path(), original_filename)
 
                             # Thumbnail
                             old_thumb_path = None
                             new_thumb_path = None
-                            if video.thumbnail_path:
-                                old_thumb_path = os.path.join('static', video.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
-                                new_thumb_path = os.path.join('static', video.thumbnail_path)
+                            if content.thumbnail_path:
+                                old_thumb_path = os.path.join('static', content.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
+                                new_thumb_path = os.path.join('static', content.thumbnail_path)
 
 
                             # Copy web version
@@ -765,15 +819,15 @@ def delete_user(user_id):
 
                         # After successful copy, remove old files
                         try:
-                            for video in videos_to_transfer:
+                            for content in content_to_transfer:
                                 # Web version
-                                old_web_path = os.path.join('static', video.file_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
+                                old_web_path = os.path.join('static', content.file_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
                                 if os.path.exists(old_web_path):
                                     os.remove(old_web_path)
                                     logging.info(f"Removed old web version: {old_web_path}")
 
                                 # Original version
-                                filename = os.path.basename(video.file_path)
+                                filename = os.path.basename(content.file_path)
                                 if filename.startswith('web_'):
                                     original_filename = f"original_{filename[4:]}"
                                 else:
@@ -784,8 +838,8 @@ def delete_user(user_id):
                                     logging.info(f"Removed old original version: {old_original_path}")
 
                                 # Thumbnail
-                                if video.thumbnail_path:
-                                    old_thumb_path = os.path.join('static', video.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
+                                if content.thumbnail_path:
+                                    old_thumb_path = os.path.join('static', content.thumbnail_path.replace(transfer_user.get_storage_path(), user.get_storage_path()))
                                     if os.path.exists(old_thumb_path):
                                         os.remove(old_thumb_path)
                                         logging.info(f"Removed old thumbnail: {old_thumb_path}")
@@ -800,8 +854,8 @@ def delete_user(user_id):
 
         else:  # Delete content
             # Delete all content if not transferring
-            for video in user.videos:
-                db.session.delete(video)
+            for content in user.content:
+                db.session.delete(content)
             for category in user.categories:
                 db.session.delete(category)
 
@@ -839,57 +893,57 @@ def internal_error(error):
 
 def check_and_sync_video_files():
     """Check video files and sync status in database"""
-    from models import Video
+    from models import Content
     logging.info("Running periodic video file check...")
 
     try:
-        videos = Video.query.all()
-        for video in videos:
-            user_upload_folder = get_user_upload_folder(video.user)
-            user_thumbnail_folder = get_user_thumbnail_folder(video.user)
+        content = Content.query.all()
+        for item in content:
+            user_upload_folder = get_user_upload_folder(item.user)
+            user_thumbnail_folder = get_user_thumbnail_folder(item.user)
 
             # Get file paths
-            web_file = os.path.join('static', video.file_path)
-            web_filename = os.path.basename(video.file_path)
+            web_file = os.path.join('static', item.file_path)
+            web_filename = os.path.basename(item.file_path)
 
             # Handle original filename (remove 'web_' if present)
             original_filename = web_filename
             if original_filename.startswith('web_'):
                 original_filename = original_filename[4:]  # Remove 'web_' prefix
 
-            original_file = os.path.join('static/uploads', video.user.get_storage_path(), f"original_{original_filename}")
-            thumbnail_file = os.path.join('static', video.thumbnail_path) if video.thumbnail_path else None
+            original_file = os.path.join('static/uploads', item.user.get_storage_path(), f"original_{original_filename}")
+            thumbnail_file = os.path.join('static', item.thumbnail_path) if item.thumbnail_path else None
 
             # Check if both video files are missing
             if not os.path.exists(web_file) and not os.path.exists(original_file):
-                video.exists = False
+                item.exists = False
                 # Remove thumbnail if it exists
                 if thumbnail_file and os.path.exists(thumbnail_file):
                     try:
                         os.remove(thumbnail_file)
-                        video.thumbnail_path = None
-                        logging.info(f"Removed thumbnail for missing video {video.id}")
+                        item.thumbnail_path = None
+                        logging.info(f"Removed thumbnail for missing content {item.id}")
                     except Exception as e:
-                        logging.error(f"Errorremoving thumbnail for video {video.id}: {str(e)}")
+                        logging.error(f"Error removing thumbnail for content {item.id}: {str(e)}")
             else:
                 # If original exists but web version is missing, create it
                 if os.path.exists(original_file) and not os.path.exists(web_file):
-                    logging.info(f"Regenerating web version for video {video.id}")
+                    logging.info(f"Regenerating web version for content {item.id}")
                     if transcode_video(original_file, web_file):
-                        video.exists = True
+                        item.exists = True
                     else:
-                        logging.error(f"Failed to generate web version for video {video.id}")
+                        logging.error(f"Failed to generate web version for content {item.id}")
 
                 # If web exists but original is missing, restore it
                 if os.path.exists(web_file) and not os.path.exists(original_file):
-                    logging.info(f"Copying web version to original for video {video.id}")
+                    logging.info(f"Copying web version to original for content {item.id}")
                     try:
                         os.makedirs(os.path.dirname(original_file), exist_ok=True)
                         import shutil
                         shutil.copy2(web_file, original_file)
                         logging.info(f"Successfully restored original file: {original_file}")
                     except Exception as e:
-                        logging.error(f"Error copying web to original for video {video.id}: {str(e)}")
+                        logging.error(f"Error copying web to original for content {item.id}: {str(e)}")
 
             db.session.commit()
 
@@ -911,7 +965,7 @@ def start_background_sync():
 # Initialize database and start background sync
 with app.app_context():
     # Import models
-    from models import Video, Category, User
+    from models import Content, Category, User
 
     # Create all tables with proper schema
     db.create_all()
