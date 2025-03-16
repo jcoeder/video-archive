@@ -5,12 +5,25 @@
     position: absolute;
     z-index: 1000;
     margin-top: 0;
+    border: 1px solid var(--bs-border-color);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    min-width: 200px;
 }
 
 .navbar .dropdown-menu-end {
     right: 0;
     left: auto;
     text-align: right;
+}
+
+.navbar .dropdown-item {
+    padding: 0.5rem 1rem;
+    transition: background-color 0.2s;
+}
+
+.navbar .dropdown-item i {
+    margin-left: 0.5rem;
+    float: right;
 }
 
 /* Video card and preview styles */
