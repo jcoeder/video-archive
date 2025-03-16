@@ -67,16 +67,17 @@
 }
 
 .dropzone .dz-remove-container {
-    margin-bottom: 10px;
+    text-align: left;
+    margin-bottom: 0.5rem;
 }
 
 .dropzone .dz-progress {
     height: 4px;
     background: var(--bs-gray-700) !important;
-    margin: 0.5rem auto;
     border-radius: 2px;
-    width: 80%;
+    width: 100%;
     overflow: hidden;
+    margin-top: 0.5rem;
 }
 
 .dropzone .dz-progress .dz-upload {
@@ -89,6 +90,7 @@
 .dropzone .dz-preview .dz-success-mark,
 .dropzone .dz-preview .dz-error-mark {
     display: none;
+    text-align: left;
 }
 
 .dropzone .dz-preview.dz-success .dz-success-mark {
@@ -101,6 +103,7 @@
 
 .dropzone .dz-preview .dz-error-message {
     display: none;
+    text-align: left;
 }
 
 .dropzone .dz-preview.dz-error .dz-error-message {
