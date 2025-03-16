@@ -2,6 +2,7 @@ from app import db
 from datetime import datetime
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
+import uuid
 
 video_categories = db.Table('video_categories',
     db.Column('video_id', db.Integer, db.ForeignKey('video.id'), primary_key=True),
@@ -10,6 +11,7 @@ video_categories = db.Table('video_categories',
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    uuid = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     username = db.Column(db.String(64), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True)  # Made email optional
     password_hash = db.Column(db.String(256))
@@ -22,6 +24,10 @@ class User(UserMixin, db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    def get_storage_path(self):
+        """Get the user's storage path using UUID"""
+        return str(self.uuid if self.id != 1 else self.id)
 
 class Video(db.Model):
     id = db.Column(db.Integer, primary_key=True)

@@ -67,16 +67,16 @@ UPLOAD_FOLDER = 'static/uploads'
 THUMBNAIL_FOLDER = 'static/thumbnails'
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm'}
 
-def get_user_upload_folder(user_id):
-    """Get user-specific upload folder path"""
-    folder = os.path.join(UPLOAD_FOLDER, str(user_id))
+def get_user_upload_folder(user):
+    """Get user-specific upload folder path using UUID"""
+    folder = os.path.join(UPLOAD_FOLDER, user.get_storage_path())
     if not os.path.exists(folder):
         os.makedirs(folder)
     return folder
 
-def get_user_thumbnail_folder(user_id):
-    """Get user-specific thumbnail folder path"""
-    folder = os.path.join(THUMBNAIL_FOLDER, str(user_id))
+def get_user_thumbnail_folder(user):
+    """Get user-specific thumbnail folder path using UUID"""
+    folder = os.path.join(THUMBNAIL_FOLDER, user.get_storage_path())
     if not os.path.exists(folder):
         os.makedirs(folder)
     return folder
@@ -274,7 +274,7 @@ def upload_video():
             file = request.files['video']
             if file and allowed_file(file.filename):
                 original_filename = secure_filename(file.filename)
-                user_upload_folder = get_user_upload_folder(current_user.id)
+                user_upload_folder = get_user_upload_folder(current_user)
 
                 # Save original file
                 original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
@@ -301,14 +301,14 @@ def upload_video():
                 if transcode_video(original_filepath, web_filepath):
                     # Generate thumbnail
                     thumbnail_filename = f"video_{int(time.time())}_thumb.jpg"
-                    thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user.id), thumbnail_filename)
+                    thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
 
                     if generate_thumbnail(web_filepath, thumbnail_path):
                         # Create database record
                         video = Video(
                             title=os.path.splitext(original_filename)[0],
-                            file_path=f"uploads/{current_user.id}/{web_filename}",
-                            thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",
+                            file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",
+                            thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
                             notes=notes,
                             date_archived=datetime.now(),
                             user_id=current_user.id,
@@ -346,7 +346,7 @@ def upload_video():
                 stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
 
                 original_filename = secure_filename(yt.title + '.mp4')
-                user_upload_folder = get_user_upload_folder(current_user.id)
+                user_upload_folder = get_user_upload_folder(current_user)
 
                 # Save original file
                 original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
@@ -374,13 +374,13 @@ def upload_video():
                 if transcode_video(original_filepath, web_filepath):
                     # Generate thumbnail with timestamp
                     thumbnail_filename = f"{os.path.splitext(web_filename)[0]}_{int(time.time())}_thumb.jpg"
-                    thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user.id), thumbnail_filename)
+                    thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
 
                     if generate_thumbnail(web_filepath, thumbnail_path):
                         video = Video(
                             title=yt.title,
-                            file_path=f"uploads/{current_user.id}/{web_filename}",  # Store web version path
-                            thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",
+                            file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",  # Store web version path
+                            thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
                             notes=notes,
                             date_archived=datetime.now(),
                             user_id=current_user.id,
@@ -646,81 +646,6 @@ def internal_error(error):
     db.session.rollback()
     return "Internal Server Error", 500
 
-def sync_video_files():
-    """Synchronize video files with database records"""
-    from models import Video
-    logging.info("Starting video file synchronization...")
-
-    try:
-        videos = Video.query.all()
-        for video in videos:
-            user_upload_folder = get_user_upload_folder(video.user_id)
-            user_thumbnail_folder = get_user_thumbnail_folder(video.user_id)
-
-            # Get file paths
-            web_file = os.path.join('static', video.file_path)
-            web_filename = os.path.basename(video.file_path)
-
-            # Handle original filename (remove 'web_' if present)
-            original_filename = web_filename
-            if original_filename.startswith('web_'):
-                original_filename = original_filename[4:]  # Remove 'web_' prefix
-
-            original_file = os.path.join('static/uploads', str(video.user_id), f"original_{original_filename}")
-            thumbnail_file = os.path.join('static', video.thumbnail_path) if video.thumbnail_path else None
-
-            # Check and fix missing files
-            if not os.path.exists(web_file):
-                if os.path.exists(original_file):
-                    logging.info(f"Regenerating web version for video {video.id}")
-                    if transcode_video(original_file, web_file):
-                        video.exists = True
-                    else:
-                        video.exists = False
-                        logging.error(f"Failed to generate web version for video {video.id}")
-                else:
-                    video.exists = False
-                    logging.warning(f"Video file missing for record {video.id}")
-
-            # Handle missing original file
-            if not os.path.exists(original_file) and os.path.exists(web_file):
-                logging.info(f"Copying web version to original for video {video.id}")
-                try:
-                    os.makedirs(os.path.dirname(original_file), exist_ok=True)
-                    import shutil
-                    shutil.copy2(web_file, original_file)
-                    # Update the original file path in case web_ prefix was removed
-                    logging.info(f"Successfully restored original file from web version: {original_file}")
-                except Exception as e:
-                    logging.error(f"Error copying web to original for video {video.id}: {str(e)}")
-
-            # Handle missing thumbnail
-            if not thumbnail_file or not os.path.exists(thumbnail_file):
-                source_file = None
-                # Try web version first, then original
-                if os.path.exists(web_file):
-                    source_file = web_file
-                    logging.info(f"Using web version to generate thumbnail for video {video.id}")
-                elif os.path.exists(original_file):
-                    source_file = original_file
-                    logging.info(f"Using original version to generate thumbnail for video {video.id}")
-
-                if source_file:
-                    logging.info(f"Generating missing thumbnail for video {video.id}")
-                    thumbnail_filename = f"video_{video.id}_{int(time.time())}_thumb.jpg"
-                    thumbnail_path = os.path.join(user_thumbnail_folder, thumbnail_filename)
-                    if generate_thumbnail(source_file, thumbnail_path):
-                        video.thumbnail_path = f"thumbnails/{video.user_id}/{thumbnail_filename}"
-                        logging.info(f"Successfully generated thumbnail: {thumbnail_path}")
-                    else:
-                        logging.error(f"Failed to generate thumbnail for video {video.id}")
-
-            db.session.commit()
-
-    except Exception as e:
-        logging.error(f"Error in sync_video_files: {str(e)}")
-        db.session.rollback()
-
 def check_and_sync_video_files():
     """Check video files and sync status in database"""
     from models import Video
@@ -729,8 +654,8 @@ def check_and_sync_video_files():
     try:
         videos = Video.query.all()
         for video in videos:
-            user_upload_folder = get_user_upload_folder(video.user_id)
-            user_thumbnail_folder = get_user_thumbnail_folder(video.user_id)
+            user_upload_folder = get_user_upload_folder(video.user)
+            user_thumbnail_folder = get_user_thumbnail_folder(video.user)
 
             # Get file paths
             web_file = os.path.join('static', video.file_path)
@@ -741,7 +666,7 @@ def check_and_sync_video_files():
             if original_filename.startswith('web_'):
                 original_filename = original_filename[4:]  # Remove 'web_' prefix
 
-            original_file = os.path.join('static/uploads', str(video.user_id), f"original_{original_filename}")
+            original_file = os.path.join('static/uploads', video.user.get_storage_path(), f"original_{original_filename}")
             thumbnail_file = os.path.join('static', video.thumbnail_path) if video.thumbnail_path else None
 
             # Check if both video files are missing
@@ -813,7 +738,5 @@ with app.app_context():
         db.session.add(admin_user)
         db.session.commit()
 
-    # Run initial sync
-    sync_video_files()
     # Start background sync thread
     start_background_sync()
