@@ -3,12 +3,16 @@ import logging
 import subprocess
 from datetime import datetime
 import cv2
+import threading
+import time
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.utils import secure_filename
 from pytube import YouTube
 import urllib.parse
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from forms import LoginForm, RegisterForm
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -26,6 +30,11 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:/
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db.init_app(app)
 
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
 # Configure upload settings
 UPLOAD_FOLDER = 'static/uploads'
 THUMBNAIL_FOLDER = 'static/thumbnails'
@@ -38,6 +47,47 @@ for folder in [UPLOAD_FOLDER, THUMBNAIL_FOLDER]:
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['THUMBNAIL_FOLDER'] = THUMBNAIL_FOLDER
+
+@login_manager.user_loader
+def load_user(id):
+    from models import User
+    return User.query.get(int(id))
+
+def scan_video_directory():
+    """Scan upload directory and update database"""
+    from models import Video
+    while True:
+        with app.app_context():
+            # Check existing videos
+            all_videos = Video.query.all()
+            for video in all_videos:
+                video_path = os.path.join('static', video.file_path)
+                video.exists = os.path.exists(video_path)
+
+            # Scan for new videos
+            for filename in os.listdir(UPLOAD_FOLDER):
+                if filename.endswith(tuple(ALLOWED_EXTENSIONS)):
+                    filepath = os.path.join('uploads', filename)
+                    existing_video = Video.query.filter_by(file_path=filepath).first()
+                    if not existing_video:
+                        # Create thumbnail
+                        thumbnail_filename = f"{os.path.splitext(filename)[0]}_thumb.jpg"
+                        thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail_filename)
+                        if generate_thumbnail(os.path.join(UPLOAD_FOLDER, filename), thumbnail_path):
+                            video = Video(
+                                title=os.path.splitext(filename)[0],
+                                file_path=filepath,
+                                thumbnail_path=f"thumbnails/{thumbnail_filename}",
+                                date_archived=datetime.now()
+                            )
+                            db.session.add(video)
+
+            db.session.commit()
+        time.sleep(300)  # Check every 5 minutes
+
+# Start scanning thread
+scanning_thread = threading.Thread(target=scan_video_directory, daemon=True)
+scanning_thread.start()
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -99,7 +149,49 @@ def generate_thumbnail(video_path, output_path):
         logging.error(f"Error generating thumbnail: {str(e)}")
         return False
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    form = LoginForm()
+    if form.validate_on_submit():
+        from models import User
+        user = User.query.filter_by(username=form.username.data).first()
+        if user is None or not user.check_password(form.password.data):
+            flash('Invalid username or password', 'danger')
+            return redirect(url_for('login'))
+        login_user(user)
+        return redirect(url_for('index'))
+    return render_template('login.html', form=form)
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    form = RegisterForm()
+    if form.validate_on_submit():
+        from models import User
+        if User.query.filter_by(username=form.username.data).first():
+            flash('Username already exists', 'danger')
+            return redirect(url_for('register'))
+        if User.query.filter_by(email=form.email.data).first():
+            flash('Email already registered', 'danger')
+            return redirect(url_for('register'))
+        user = User(username=form.username.data, email=form.email.data)
+        user.set_password(form.password.data)
+        db.session.add(user)
+        db.session.commit()
+        flash('Registration successful!', 'success')
+        return redirect(url_for('login'))
+    return render_template('register.html', form=form)
+
+@app.route('/logout')
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
+
 @app.route('/')
+@login_required
 def index():
     from models import Video, Category
     videos = Video.query.order_by(Video.date_archived.desc()).all()
@@ -107,6 +199,7 @@ def index():
     return render_template('index.html', videos=videos, categories=categories)
 
 @app.route('/upload', methods=['POST'])
+@login_required
 def upload_video():
     from models import Video, Category
 
@@ -198,6 +291,7 @@ def upload_video():
     return redirect(url_for('index'))
 
 @app.route('/video/<int:video_id>', methods=['GET', 'POST'])
+@login_required
 def video_detail(video_id):
     from models import Video, Category
     video = Video.query.get_or_404(video_id)
@@ -216,7 +310,32 @@ def video_detail(video_id):
 
     return render_template('video.html', video=video, categories=categories)
 
+@app.route('/video/delete/<int:video_id>', methods=['POST'])
+@login_required
+def delete_video(video_id):
+    from models import Video
+    video = Video.query.get_or_404(video_id)
+    try:
+        # Delete files
+        if video.file_path:
+            file_path = os.path.join('static', video.file_path)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        if video.thumbnail_path:
+            thumb_path = os.path.join('static', video.thumbnail_path)
+            if os.path.exists(thumb_path):
+                os.remove(thumb_path)
+        # Delete database entry
+        db.session.delete(video)
+        db.session.commit()
+        flash('Video deleted successfully', 'success')
+    except Exception as e:
+        flash(f'Error deleting video: {str(e)}', 'danger')
+    return redirect(url_for('index'))
+
+
 @app.route('/category/add', methods=['POST'])
+@login_required
 def add_category():
     from models import Category
     name = request.form.get('category_name')
@@ -242,7 +361,5 @@ def add_category():
 
 with app.app_context():
     # Import models so they can be created
-    from models import Video, Category
-    # Drop all tables and recreate them with the new schema
-    db.drop_all()
+    from models import Video, Category, User
     db.create_all()

@@ -14,6 +14,12 @@
             <a class="navbar-brand" href="{{ url_for('index') }}">
                 <i class="bi bi-collection-play"></i> Video Archive
             </a>
+            {% if current_user.is_authenticated %}
+            <div class="navbar-nav ms-auto">
+                <span class="nav-item nav-link text-light">Welcome, {{ current_user.username }}</span>
+                <a class="nav-item nav-link" href="{{ url_for('logout') }}">Logout</a>
+            </div>
+            {% endif %}
         </div>
     </nav>
 

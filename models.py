@@ -1,10 +1,24 @@
 from app import db
 from datetime import datetime
+from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
 
 video_categories = db.Table('video_categories',
     db.Column('video_id', db.Integer, db.ForeignKey('video.id'), primary_key=True),
     db.Column('category_id', db.Integer, db.ForeignKey('category.id'), primary_key=True)
 )
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256))
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
 class Video(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -13,6 +27,7 @@ class Video(db.Model):
     thumbnail_path = db.Column(db.String(500))
     notes = db.Column(db.Text)
     date_archived = db.Column(db.DateTime, default=datetime.utcnow)
+    exists = db.Column(db.Boolean, default=True)  # Track if video file exists
     categories = db.relationship('Category', secondary=video_categories, lazy='subquery',
         backref=db.backref('videos', lazy=True))
 

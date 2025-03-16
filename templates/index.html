@@ -21,6 +21,11 @@
             {% for video in videos %}
             <div class="col-md-6 col-lg-4 mb-4">
                 <div class="card video-card h-100">
+                    {% if not video.exists %}
+                    <div class="missing-video-overlay">
+                        <i class="bi bi-x-circle-fill"></i>
+                    </div>
+                    {% endif %}
                     {% if video.thumbnail_path %}
                     <img src="{{ url_for('static', filename=video.thumbnail_path) }}" 
                          class="card-img-top video-thumbnail" alt="{{ video.title }}">
@@ -44,11 +49,20 @@
                         </p>
                         <div class="mb-2">
                             {% for category in video.categories %}
-                            <span class="badge bg-secondary category-badge">{{ category.name }}</span>
+                            <span class="badge bg-secondary">{{ category.name }}</span>
                             {% endfor %}
                         </div>
-                        <a href="{{ url_for('video_detail', video_id=video.id) }}" 
-                           class="btn btn-primary btn-sm">View Details</a>
+                        <div class="d-flex gap-2">
+                            <a href="{{ url_for('video_detail', video_id=video.id) }}" 
+                               class="btn btn-primary btn-sm">View Details</a>
+                            <form action="{{ url_for('delete_video', video_id=video.id) }}" 
+                                  method="POST" style="display: inline;">
+                                <button type="submit" class="btn btn-danger btn-sm" 
+                                        onclick="return confirm('Are you sure you want to delete this video?')">
+                                    Delete
+                                </button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>

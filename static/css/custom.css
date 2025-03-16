@@ -105,3 +105,21 @@ video::-webkit-media-controls {
         max-height: 50vh;
     }
 }
+
+.missing-video-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 200px;
+    background-color: rgba(var(--bs-danger-rgb), 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+}
+
+.missing-video-overlay i {
+    font-size: 4rem;
+    color: white;
+}
