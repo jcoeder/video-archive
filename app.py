@@ -689,6 +689,7 @@ def sync_video_files():
                     os.makedirs(os.path.dirname(original_file), exist_ok=True)
                     import shutil
                     shutil.copy2(web_file, original_file)
+                    logging.info(f"Successfully restored original file: {original_file}")
                 except Exception as e:
                     logging.error(f"Error copying web to original for video {video.id}: {str(e)}")
 
