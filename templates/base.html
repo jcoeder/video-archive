@@ -10,38 +10,30 @@
 </head>
 <body>
     <nav class="navbar navbar-dark bg-dark">
-        <div class="container">
+        <div class="container d-flex justify-content-between align-items-center">
             <a class="navbar-brand" href="{{ url_for('index') }}">
                 <i class="bi bi-collection-play"></i> Video Archive
             </a>
             {% if current_user.is_authenticated %}
-            <ul class="navbar-nav ms-auto">
-                <li class="nav-item dropdown">
-                    <a class="nav-link" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <div class="dropdown">
+                    <button class="btn nav-link p-0" type="button" data-bs-toggle="dropdown">
                         <i class="bi bi-three-dots-vertical"></i>
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-end">
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end">
                         {% if current_user.is_admin %}
-                        <li>
                             <a class="dropdown-item" href="{{ url_for('admin') }}">
-                                Admin Portal <i class="bi bi-shield-lock"></i>
+                                <i class="bi bi-shield-lock"></i> Admin Portal
                             </a>
-                        </li>
-                        <li><hr class="dropdown-divider"></li>
+                            <div class="dropdown-divider"></div>
                         {% endif %}
-                        <li>
-                            <a class="dropdown-item" href="{{ url_for('change_password') }}">
-                                Change Password <i class="bi bi-key"></i>
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item" href="{{ url_for('logout') }}">
-                                Logout <i class="bi bi-box-arrow-right"></i>
-                            </a>
-                        </li>
-                    </ul>
-                </li>
-            </ul>
+                        <a class="dropdown-item" href="{{ url_for('change_password') }}">
+                            <i class="bi bi-key"></i> Change Password
+                        </a>
+                        <a class="dropdown-item" href="{{ url_for('logout') }}">
+                            <i class="bi bi-box-arrow-right"></i> Logout
+                        </a>
+                    </div>
+                </div>
             {% endif %}
         </div>
     </nav>
