@@ -67,6 +67,16 @@
                         <div class="dropzone-container mb-4">
                             <form id="uploadForm" action="{{ url_for('upload_video') }}" method="post" class="dropzone">
                                 {{ form.csrf_token }}
+                                <div class="dz-default dz-message">
+                                    <div class="upload-message">
+                                        <div class="upload-icon mb-3">
+                                            <i class="bi bi-cloud-arrow-up display-1"></i>
+                                        </div>
+                                        <h4 class="mb-2">Drop files here or click to upload</h4>
+                                        <p class="text-muted">Supported formats: MP4, AVI, MOV, MKV, WEBM</p>
+                                    </div>
+                                </div>
+                                <div class="dz-preview-files"></div>
                             </form>
                         </div>
 
@@ -153,6 +163,7 @@ const myDropzone = new Dropzone("#uploadForm", {
     acceptedFiles: ".mp4,.avi,.mov,.mkv,.webm",
     addRemoveLinks: false,
     createImageThumbnails: false,
+    previewsContainer: ".dz-preview-files",
     previewTemplate: `
         <div class="dz-preview">
             <div class="dz-filename mb-2">
@@ -166,15 +177,6 @@ const myDropzone = new Dropzone("#uploadForm", {
                     Remove file
                 </button>
             </div>
-        </div>
-    `,
-    dictDefaultMessage: `
-        <div class="upload-message">
-            <div class="upload-icon mb-3">
-                <i class="bi bi-cloud-arrow-up display-1"></i>
-            </div>
-            <h4 class="mb-2">Drop files here or click to upload</h4>
-            <p class="text-muted">Supported formats: MP4, AVI, MOV, MKV, WEBM</p>
         </div>
     `,
     init: function() {
@@ -276,7 +278,7 @@ myDropzone.on("error", function(file, errorMessage) {
     loadingSpinner.classList.add('d-none');
 });
 
-// Category form handling remains the same
+// Category form handling
 document.getElementById('categoryForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const categoryInput = this.querySelector('input[name="category_name"]');

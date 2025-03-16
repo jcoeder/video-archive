@@ -7,15 +7,91 @@
     padding: 2rem;
     cursor: pointer;
     transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    position: relative;
+    overflow-y: auto;
+    max-height: 600px;
 }
 
 .dropzone:hover,
 .dropzone.dz-drag-hover {
     border-color: var(--bs-primary);
     background: rgba(var(--bs-primary-rgb), 0.1) !important;
+}
+
+.dropzone .dz-preview {
+    background: var(--bs-dark) !important;
+    border: 1px solid var(--bs-gray-700);
+    border-radius: 6px;
+    padding: 1rem;
+    margin: 0.5rem;
+    width: 120px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    transition: transform 0.2s ease;
+}
+
+.dropzone .dz-preview:hover {
+    transform: translateY(-2px);
+}
+
+.dropzone .dz-preview * {
+    background: transparent !important;
+}
+
+.dropzone .dz-preview-icon {
+    color: var(--bs-gray-400);
+    transition: color 0.2s ease;
+    margin-bottom: 1rem;
+}
+
+.dropzone .dz-preview:hover .dz-preview-icon {
+    color: var(--bs-primary);
+}
+
+.dropzone .dz-remove-container {
+    text-align: center;
+    width: 100%;
+}
+
+.dropzone .dz-default.dz-message {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.dropzone.dz-started .dz-message {
+    display: none;
+}
+
+.dropzone .dz-preview-files {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 1rem;
+    position: relative;
+    z-index: 1;
+}
+
+.dz-filename {
+    color: var(--bs-gray-300);
+    font-size: 0.875rem;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 0.5rem;
 }
 
 .upload-message {
@@ -32,44 +108,6 @@
     color: var(--bs-primary);
 }
 
-.dropzone .dz-preview {
-    background: var(--bs-dark) !important;
-    border: 1px solid var(--bs-gray-700);
-    border-radius: 6px;
-    padding: 1rem;
-    margin: 0.75rem;
-    width: 180px;
-    display: inline-block;
-    vertical-align: top;
-    text-align: center;
-    transition: transform 0.2s ease;
-}
-
-.dropzone .dz-preview:hover {
-    transform: translateY(-2px);
-}
-
-.dropzone .dz-preview * {
-    background: transparent !important;
-}
-
-.dropzone .dz-filename {
-    color: var(--bs-gray-300);
-}
-
-.dropzone .dz-preview-icon {
-    color: var(--bs-gray-400);
-    transition: color 0.2s ease;
-}
-
-.dropzone .dz-preview:hover .dz-preview-icon {
-    color: var(--bs-primary);
-}
-
-.dropzone .dz-remove-container {
-    text-align: center;
-    margin-bottom: 0.5rem;
-}
 
 /* Upload progress styles moved outside dropzone */
 #upload-progress-container {
