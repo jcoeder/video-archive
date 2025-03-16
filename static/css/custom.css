@@ -47,6 +47,13 @@
     justify-content: center;
 }
 
+.dropzone .dz-preview .dz-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: var(--bs-gray-700);
+}
+
 .dropzone .dz-preview .dz-details {
     color: var(--bs-gray-300);
     padding: 10px 0;
@@ -79,6 +86,7 @@
     display: none;
     color: var(--bs-success);
     font-size: 24px;
+    z-index: 10;
 }
 
 .dropzone .dz-preview .dz-error-mark {
@@ -98,10 +106,25 @@
     font-size: 0.875rem;
     margin-top: 5px;
     display: none;
+    background: var(--bs-gray-900);
+    padding: 0.5rem;
+    border-radius: 4px;
 }
 
 .dropzone .dz-preview.dz-error .dz-error-message {
     display: block;
+}
+
+.dropzone .dz-preview .dz-remove {
+    color: var(--bs-danger);
+    text-decoration: none;
+    display: block;
+    margin-top: 5px;
+    text-align: center;
+}
+
+.dropzone .dz-preview .dz-remove:hover {
+    text-decoration: underline;
 }
 
 /* Navbar and dropdown styles */
