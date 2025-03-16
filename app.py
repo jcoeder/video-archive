@@ -482,15 +482,39 @@ def delete_video(video_id):
         return redirect(url_for('index'))
 
     try:
-        # Delete files
+        # Get file paths
         if video.file_path:
             file_path = os.path.join('static', video.file_path)
-            if os.path.exists(file_path):
-                os.remove(file_path)
+            original_file = os.path.join('static/uploads', str(video.user_id), 
+                f"original_{os.path.basename(video.file_path)}")
+            web_file = os.path.join('static/uploads', str(video.user_id), 
+                f"web_{os.path.basename(video.file_path)}")
+
+            # Delete original file if it exists
+            if os.path.exists(original_file):
+                try:
+                    os.remove(original_file)
+                    logging.info(f"Deleted original file: {original_file}")
+                except Exception as e:
+                    logging.error(f"Error deleting original file {original_file}: {str(e)}")
+
+            # Delete web-optimized file if it exists
+            if os.path.exists(web_file):
+                try:
+                    os.remove(web_file)
+                    logging.info(f"Deleted web file: {web_file}")
+                except Exception as e:
+                    logging.error(f"Error deleting web file {web_file}: {str(e)}")
+
+        # Delete thumbnail if it exists
         if video.thumbnail_path:
             thumb_path = os.path.join('static', video.thumbnail_path)
             if os.path.exists(thumb_path):
-                os.remove(thumb_path)
+                try:
+                    os.remove(thumb_path)
+                    logging.info(f"Deleted thumbnail: {thumb_path}")
+                except Exception as e:
+                    logging.error(f"Error deleting thumbnail {thumb_path}: {str(e)}")
 
         # Delete database entry
         db.session.delete(video)
