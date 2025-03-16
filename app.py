@@ -623,14 +623,14 @@ def delete_user(user_id):
     if not current_user.is_admin:
         flash('Access denied. Admin privileges required.', 'danger')
         return redirect(url_for('admin'))
-    
+
     from models import User
     user = User.query.get_or_404(user_id)
-    
+
     if user.username == 'admin':
         flash('Cannot delete default admin user.', 'danger')
         return redirect(url_for('admin'))
-    
+
     try:
         db.session.delete(user)
         db.session.commit()
@@ -721,7 +721,78 @@ def sync_video_files():
         logging.error(f"Error in sync_video_files: {str(e)}")
         db.session.rollback()
 
-# Initialize database and create admin user
+def check_and_sync_video_files():
+    """Check video files and sync status in database"""
+    from models import Video
+    logging.info("Running periodic video file check...")
+
+    try:
+        videos = Video.query.all()
+        for video in videos:
+            user_upload_folder = get_user_upload_folder(video.user_id)
+            user_thumbnail_folder = get_user_thumbnail_folder(video.user_id)
+
+            # Get file paths
+            web_file = os.path.join('static', video.file_path)
+            web_filename = os.path.basename(video.file_path)
+
+            # Handle original filename (remove 'web_' if present)
+            original_filename = web_filename
+            if original_filename.startswith('web_'):
+                original_filename = original_filename[4:]  # Remove 'web_' prefix
+
+            original_file = os.path.join('static/uploads', str(video.user_id), f"original_{original_filename}")
+            thumbnail_file = os.path.join('static', video.thumbnail_path) if video.thumbnail_path else None
+
+            # Check if both video files are missing
+            if not os.path.exists(web_file) and not os.path.exists(original_file):
+                video.exists = False
+                # Remove thumbnail if it exists
+                if thumbnail_file and os.path.exists(thumbnail_file):
+                    try:
+                        os.remove(thumbnail_file)
+                        video.thumbnail_path = None
+                        logging.info(f"Removed thumbnail for missing video {video.id}")
+                    except Exception as e:
+                        logging.error(f"Error removing thumbnail for video {video.id}: {str(e)}")
+            else:
+                # If original exists but web version is missing, create it
+                if os.path.exists(original_file) and not os.path.exists(web_file):
+                    logging.info(f"Regenerating web version for video {video.id}")
+                    if transcode_video(original_file, web_file):
+                        video.exists = True
+                    else:
+                        logging.error(f"Failed to generate web version for video {video.id}")
+
+                # If web exists but original is missing, restore it
+                if os.path.exists(web_file) and not os.path.exists(original_file):
+                    logging.info(f"Copying web version to original for video {video.id}")
+                    try:
+                        os.makedirs(os.path.dirname(original_file), exist_ok=True)
+                        import shutil
+                        shutil.copy2(web_file, original_file)
+                        logging.info(f"Successfully restored original file: {original_file}")
+                    except Exception as e:
+                        logging.error(f"Error copying web to original for video {video.id}: {str(e)}")
+
+            db.session.commit()
+
+    except Exception as e:
+        logging.error(f"Error in check_and_sync_video_files: {str(e)}")
+        db.session.rollback()
+
+def start_background_sync():
+    """Start background thread for periodic file checks"""
+    def run_periodic_check():
+        while True:
+            with app.app_context():
+                check_and_sync_video_files()
+            time.sleep(60)  # Wait for 1 minute
+
+    sync_thread = threading.Thread(target=run_periodic_check, daemon=True)
+    sync_thread.start()
+
+# Initialize database and start background sync
 with app.app_context():
     # Import models
     from models import Video, Category, User
@@ -742,5 +813,7 @@ with app.app_context():
         db.session.add(admin_user)
         db.session.commit()
 
-    # Sync video files with database records
+    # Run initial sync
     sync_video_files()
+    # Start background sync thread
+    start_background_sync()
