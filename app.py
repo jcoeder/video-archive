@@ -280,8 +280,12 @@ def logout():
 @login_required
 def index():
     from models import Video, Category
-    videos = Video.query.order_by(Video.date_archived.desc()).all()
-    categories = Category.query.all()
+    if current_user.is_admin:
+        videos = Video.query.order_by(Video.date_archived.desc()).all()
+        categories = Category.query.all()
+    else:
+        videos = Video.query.filter_by(user_id=current_user.id).order_by(Video.date_archived.desc()).all()
+        categories = Category.query.filter_by(user_id=current_user.id).all()
     return render_template('index.html', videos=videos, categories=categories)
 
 @app.route('/upload', methods=['POST'])
@@ -543,20 +547,24 @@ def internal_error(error):
     db.session.rollback()
     return "Internal Server Error", 500
 
-# Start scanning thread
-scanning_thread = threading.Thread(target=scan_video_directory, daemon=True)
-scanning_thread.start()
-
+# Initialize database and create admin user
 with app.app_context():
     # Import models so they can be created
     from models import Video, Category, User
+
+    # Drop all tables to reset
+    db.drop_all()
     # Create all tables with proper schema
     db.create_all()
 
     # Create default admin user if it doesn't exist
     admin_user = User.query.filter_by(username='admin').first()
     if not admin_user:
-        admin_user = User(username='admin', email='admin@example.com', is_admin=True)
+        admin_user = User(id=1, username='admin', email='admin@example.com', is_admin=True)
         admin_user.set_password('admin')
         db.session.add(admin_user)
         db.session.commit()
+
+# Start scanning thread
+scanning_thread = threading.Thread(target=scan_video_directory, daemon=True)
+scanning_thread.start()
