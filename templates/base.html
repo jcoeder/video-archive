@@ -19,13 +19,15 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarContent">
-                <div class="navbar-nav ms-auto">
+                <ul class="navbar-nav ms-auto">
                     {% if current_user.is_admin %}
-                    <a class="nav-item nav-link" href="{{ url_for('admin') }}">
-                        <i class="bi bi-shield-lock"></i> Admin Portal
-                    </a>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('admin') }}">
+                            <i class="bi bi-shield-lock"></i> Admin Portal
+                        </a>
+                    </li>
                     {% endif %}
-                    <div class="nav-item dropdown">
+                    <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-person-circle"></i> {{ current_user.username }}
                         </a>
@@ -42,8 +44,8 @@
                                 </a>
                             </li>
                         </ul>
-                    </div>
-                </div>
+                    </li>
+                </ul>
             </div>
             {% endif %}
         </div>
