@@ -91,88 +91,6 @@ def load_user(id):
     from models import User
     return User.query.get(int(id))
 
-def cleanup_unused_thumbnails():
-    """Clean up thumbnails that don't have corresponding video entries"""
-    try:
-        from models import Video
-        with app.app_context():
-            # Get all thumbnail paths from the database
-            db_thumbnails = set(v.thumbnail_path for v in Video.query.all() if v.thumbnail_path)
-
-            # Scan thumbnail directory
-            for user_dir in os.listdir(THUMBNAIL_FOLDER):
-                user_thumb_dir = os.path.join(THUMBNAIL_FOLDER, user_dir)
-                if os.path.isdir(user_thumb_dir):
-                    for thumb in os.listdir(user_thumb_dir):
-                        thumb_path = f"thumbnails/{user_dir}/{thumb}"
-                        if thumb_path not in db_thumbnails:
-                            try:
-                                os.remove(os.path.join('static', thumb_path))
-                                logging.info(f"Removed unused thumbnail: {thumb_path}")
-                            except Exception as e:
-                                logging.error(f"Error removing thumbnail {thumb_path}: {str(e)}")
-    except Exception as e:
-        logging.error(f"Error in cleanup_unused_thumbnails: {str(e)}")
-
-def scan_video_directory():
-    """Scan upload directory and update database"""
-    from models import Video, User
-    while True:
-        with app.app_context():
-            try:
-                # Check existing videos
-                all_videos = Video.query.all()
-                for video in all_videos:
-                    video_path = os.path.join('static', video.file_path)
-                    video.exists = os.path.exists(video_path)
-
-                # Scan for new videos - per user directory
-                users = User.query.all()
-                for user in users:
-                    user_upload_dir = get_user_upload_folder(user.id)
-                    if os.path.exists(user_upload_dir):
-                        for filename in os.listdir(user_upload_dir):
-                            if filename.endswith(tuple(ALLOWED_EXTENSIONS)):
-                                filepath = os.path.join('uploads', str(user.id), filename)
-                                existing_video = Video.query.filter_by(file_path=filepath).first()
-                                if not existing_video:
-                                    try:
-                                        # Create thumbnail with timestamp to ensure uniqueness
-                                        thumbnail_filename = f"{os.path.splitext(filename)[0]}_{int(time.time())}_thumb.jpg"
-                                        thumbnail_path = os.path.join(get_user_thumbnail_folder(user.id), thumbnail_filename)
-
-                                        if generate_thumbnail(os.path.join(user_upload_dir, filename), thumbnail_path):
-                                            video = Video(
-                                                title=os.path.splitext(filename)[0],
-                                                file_path=filepath,
-                                                thumbnail_path=f"thumbnails/{user.id}/{thumbnail_filename}",
-                                                date_archived=datetime.now(),
-                                                user_id=user.id
-                                            )
-                                            db.session.add(video)
-                                            logging.info(f"Added new video: {filepath}")
-                                        else:
-                                            logging.error(f"Failed to generate thumbnail for {filepath}")
-                                    except Exception as e:
-                                        logging.error(f"Error processing new video {filepath}: {str(e)}")
-                                        continue
-
-                db.session.commit()
-
-                # Clean up unused thumbnails
-                cleanup_unused_thumbnails()
-
-            except Exception as e:
-                logging.error(f"Error in scan_video_directory: {str(e)}")
-                try:
-                    db.session.rollback()
-                except:
-                    pass
-
-        time.sleep(300)  # Check every 5 minutes
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def transcode_video(input_path, output_path):
     """Transcode video to web-compatible format (MP4/H.264)"""
@@ -714,7 +632,3 @@ with app.app_context():
     admin_user.set_password('admin')
     db.session.add(admin_user)
     db.session.commit()
-
-# Start scanning thread
-scanning_thread = threading.Thread(target=scan_video_directory, daemon=True)
-scanning_thread.start()
