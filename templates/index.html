@@ -148,24 +148,17 @@ const myDropzone = new Dropzone("#uploadForm", {
         <p class="text-muted small">Supported formats: MP4, AVI, MOV, MKV, WEBM</p>
     `,
     previewTemplate: `
-        <div class="dz-preview dz-file-preview">
+        <div class="dz-preview">
             <div class="dz-details">
                 <div class="dz-filename"><span data-dz-name></span></div>
                 <div class="dz-size"><span data-dz-size></span></div>
                 <div class="dz-progress">
                     <span class="dz-upload" data-dz-uploadprogress></span>
                 </div>
-                <div class="dz-success-mark">
-                    <i class="bi bi-check-circle-fill"></i>
-                </div>
-                <div class="dz-error-mark">
-                    <i class="bi bi-x-circle-fill"></i>
-                </div>
-                <div class="dz-error-message">
-                    <span data-dz-errormessage></span>
-                </div>
+                <div class="dz-success-mark"><i class="bi bi-check-circle-fill"></i></div>
+                <div class="dz-error-mark"><i class="bi bi-x-circle-fill"></i></div>
+                <div class="dz-error-message"><span data-dz-errormessage></span></div>
             </div>
-            <a class="dz-remove" href="javascript:undefined;" data-dz-remove>Remove file</a>
         </div>
     `
 });
@@ -179,7 +172,6 @@ function processUploads() {
     const uploadButton = document.getElementById('uploadButton');
     const loadingSpinner = document.getElementById('loadingSpinner');
 
-    // Process YouTube URL if provided
     if (youtubeUrl) {
         uploadButton.disabled = true;
         loadingSpinner.classList.remove('d-none');
@@ -205,12 +197,10 @@ function processUploads() {
         });
     }
 
-    // Process Dropzone files
     if (myDropzone.files.length > 0) {
         uploadButton.disabled = true;
         loadingSpinner.classList.remove('d-none');
 
-        // Add metadata to all files
         myDropzone.files.forEach(file => {
             file.formData = {
                 notes: notes,
