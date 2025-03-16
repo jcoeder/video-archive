@@ -278,6 +278,9 @@ def upload_video():
 
                 # Save original file
                 original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
+                web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
+                web_filepath = os.path.join(user_upload_folder, web_filename)
+
                 os.makedirs(os.path.dirname(original_filepath), exist_ok=True)
                 file.save(original_filepath)
 
@@ -287,7 +290,6 @@ def upload_video():
                     # Check for duplicates
                     duplicate = check_duplicate_video(file_hash, current_user.id)
                     if duplicate:
-                        # Clean up the uploaded file
                         try:
                             os.remove(original_filepath)
                         except Exception as e:
@@ -296,23 +298,22 @@ def upload_video():
                         return redirect(url_for('video_detail', video_id=duplicate.id))
 
                 # Create web-optimized version
-                web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
-                web_filepath = os.path.join(user_upload_folder, web_filename)
-
                 if transcode_video(original_filepath, web_filepath):
-                    # Generate thumbnail with timestamp
-                    thumbnail_filename = f"{os.path.splitext(web_filename)[0]}_{int(time.time())}_thumb.jpg"
+                    # Generate thumbnail
+                    thumbnail_filename = f"video_{int(time.time())}_thumb.jpg"
                     thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user.id), thumbnail_filename)
 
                     if generate_thumbnail(web_filepath, thumbnail_path):
+                        # Create database record
                         video = Video(
                             title=os.path.splitext(original_filename)[0],
-                            file_path=f"uploads/{current_user.id}/{web_filename}",  # Store web version path
+                            file_path=f"uploads/{current_user.id}/{web_filename}",
                             thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",
                             notes=notes,
                             date_archived=datetime.now(),
                             user_id=current_user.id,
-                            file_hash=file_hash
+                            file_hash=file_hash,
+                            exists=True
                         )
 
                         # Add categories
@@ -323,25 +324,20 @@ def upload_video():
 
                         db.session.add(video)
                         db.session.commit()
-
-                        flash('Video successfully archived!', 'success')
+                        flash('Video successfully uploaded!', 'success')
                     else:
-                        # Clean up files on thumbnail generation failure
                         try:
                             os.remove(original_filepath)
                             os.remove(web_filepath)
                         except Exception as e:
                             logging.error(f"Error cleaning up files: {str(e)}")
                         flash('Error generating thumbnail', 'error')
-                        return redirect(url_for('index'))
                 else:
-                    # Clean up original file on transcoding failure
                     try:
                         os.remove(original_filepath)
                     except Exception as e:
                         logging.error(f"Error cleaning up original file: {str(e)}")
                     flash('Error processing video file', 'error')
-                    return redirect(url_for('index'))
 
         elif 'youtube_url' in request.form:
             url = request.form['youtube_url']
@@ -560,7 +556,7 @@ def admin():
 def toggle_admin(user_id):
     if not current_user.is_admin:
         flash('Access denied. Admin privileges required.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('admin'))
 
     from models import User
     user = User.query.get_or_404(user_id)
@@ -621,29 +617,112 @@ def add_category():
         'error': 'Category name is required'
     })
 
+@app.route('/admin/user/delete/<int:user_id>', methods=['POST'])
+@login_required
+def delete_user(user_id):
+    if not current_user.is_admin:
+        flash('Access denied. Admin privileges required.', 'danger')
+        return redirect(url_for('admin'))
+    
+    from models import User
+    user = User.query.get_or_404(user_id)
+    
+    if user.username == 'admin':
+        flash('Cannot delete default admin user.', 'danger')
+        return redirect(url_for('admin'))
+    
+    try:
+        db.session.delete(user)
+        db.session.commit()
+        flash(f'User {user.username} deleted successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting user: {str(e)}', 'danger')
+    return redirect(url_for('admin'))
+
 @app.errorhandler(500)
 def internal_error(error):
     logger.error(f"Internal Server Error: {str(error)}")
     db.session.rollback()
     return "Internal Server Error", 500
 
+def sync_video_files():
+    """Synchronize video files with database records"""
+    from models import Video
+    logging.info("Starting video file synchronization...")
+
+    try:
+        videos = Video.query.all()
+        for video in videos:
+            user_upload_folder = get_user_upload_folder(video.user_id)
+            user_thumbnail_folder = get_user_thumbnail_folder(video.user_id)
+
+            # Get file paths
+            web_file = os.path.join('static', video.file_path)
+            original_file = os.path.join('static/uploads', str(video.user_id), 
+                                       f"original_{os.path.basename(video.file_path)}")
+            thumbnail_file = os.path.join('static', video.thumbnail_path) if video.thumbnail_path else None
+
+            # Check and fix missing files
+            if not os.path.exists(web_file):
+                if os.path.exists(original_file):
+                    logging.info(f"Regenerating web version for video {video.id}")
+                    if transcode_video(original_file, web_file):
+                        video.exists = True
+                    else:
+                        video.exists = False
+                        logging.error(f"Failed to generate web version for video {video.id}")
+                else:
+                    video.exists = False
+                    logging.warning(f"Video file missing for record {video.id}")
+
+            # Handle missing original file
+            if not os.path.exists(original_file) and os.path.exists(web_file):
+                logging.info(f"Copying web version to original for video {video.id}")
+                try:
+                    os.makedirs(os.path.dirname(original_file), exist_ok=True)
+                    import shutil
+                    shutil.copy2(web_file, original_file)
+                except Exception as e:
+                    logging.error(f"Error copying web to original for video {video.id}: {str(e)}")
+
+            # Handle missing thumbnail
+            if not thumbnail_file or not os.path.exists(thumbnail_file):
+                if os.path.exists(web_file):
+                    logging.info(f"Generating missing thumbnail for video {video.id}")
+                    thumbnail_filename = f"video_{video.id}_{int(time.time())}_thumb.jpg"
+                    thumbnail_path = os.path.join(user_thumbnail_folder, thumbnail_filename)
+                    if generate_thumbnail(web_file, thumbnail_path):
+                        video.thumbnail_path = f"thumbnails/{video.user_id}/{thumbnail_filename}"
+                    else:
+                        logging.error(f"Failed to generate thumbnail for video {video.id}")
+
+            db.session.commit()
+
+    except Exception as e:
+        logging.error(f"Error in sync_video_files: {str(e)}")
+        db.session.rollback()
+
 # Initialize database and create admin user
 with app.app_context():
     # Import models
     from models import Video, Category, User
 
-    # Drop all tables to reset
-    db.drop_all()
     # Create all tables with proper schema
     db.create_all()
 
-    # Create default admin user with ID 1
-    admin_user = User(
-        id=1,
-        username='admin',
-        email='admin@example.com',
-        is_admin=True
-    )
-    admin_user.set_password('admin')
-    db.session.add(admin_user)
-    db.session.commit()
+    # Create default admin user with ID 1 if it doesn't exist
+    admin_user = User.query.get(1)
+    if not admin_user:
+        admin_user = User(
+            id=1,
+            username='admin',
+            email='admin@example.com',
+            is_admin=True
+        )
+        admin_user.set_password('admin')
+        db.session.add(admin_user)
+        db.session.commit()
+
+    # Sync video files with database records
+    sync_video_files()
