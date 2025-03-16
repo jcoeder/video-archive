@@ -18,6 +18,7 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     categories = db.relationship('Category', backref='user', lazy=True)
     videos = db.relationship('Video', backref='user', lazy=True)
+    jobs = db.relationship('Job', backref='user', lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -47,3 +48,24 @@ class Category(db.Model):
     name = db.Column(db.String(50), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     __table_args__ = (db.UniqueConstraint('name', 'user_id', name='_user_category_uc'),)
+
+class Job(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    job_type = db.Column(db.String(50), nullable=False)  # e.g., 'youtube_download'
+    status = db.Column(db.String(20), nullable=False, default='pending')  # pending, processing, completed, failed
+    youtube_url = db.Column(db.String(500))
+    result = db.Column(db.Text)  # File path or error message
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'job_type': self.job_type,
+            'status': self.status,
+            'youtube_url': self.youtube_url,
+            'result': self.result,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }

@@ -65,6 +65,12 @@
                     <i class="bi bi-upload"></i> Upload Video
                 </a>
             </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link {% if request.endpoint == 'jobs' %}active{% endif %}" 
+                   href="{{ url_for('jobs') }}">
+                    <i class="bi bi-clock-history"></i> Jobs
+                </a>
+            </li>
         </ul>
         {% endif %}
 
