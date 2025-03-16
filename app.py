@@ -12,7 +12,8 @@ from werkzeug.utils import secure_filename
 from pytube import YouTube
 import urllib.parse
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from forms import LoginForm, RegisterForm  # Re-add the forms import
+from forms import LoginForm, RegisterForm, ChangePasswordForm  # Added ChangePasswordForm import
+
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -277,7 +278,8 @@ def upload_video():
                         file_path=f"uploads/{current_user.id}/{final_filename}",  # Store relative path
                         thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",  # Store relative path
                         notes=notes,
-                        date_archived=datetime.now()
+                        date_archived=datetime.now(),
+                        user_id=current_user.id #added user_id
                     )
 
                     # Clean up original file
@@ -310,7 +312,8 @@ def upload_video():
                     file_path=f"uploads/{current_user.id}/{final_filename}",  # Store relative path
                     thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",  # Store relative path
                     notes=notes,
-                    date_archived=datetime.now()
+                    date_archived=datetime.now(),
+                    user_id=current_user.id #added user_id
                 )
 
                 # Clean up original file
@@ -360,6 +363,12 @@ def video_detail(video_id):
 def delete_video(video_id):
     from models import Video
     video = Video.query.get_or_404(video_id)
+
+    # Ensure user owns the video or is admin
+    if not current_user.is_admin and video.user_id != current_user.id:
+        flash('Access denied.', 'danger')
+        return redirect(url_for('index'))
+
     try:
         # Delete files
         if video.file_path:
@@ -370,13 +379,58 @@ def delete_video(video_id):
             thumb_path = os.path.join('static', video.thumbnail_path)
             if os.path.exists(thumb_path):
                 os.remove(thumb_path)
+
         # Delete database entry
         db.session.delete(video)
         db.session.commit()
         flash('Video deleted successfully', 'success')
     except Exception as e:
+        logger.error(f"Error deleting video: {str(e)}")
         flash(f'Error deleting video: {str(e)}', 'danger')
     return redirect(url_for('index'))
+
+
+@app.route('/admin')
+@login_required
+def admin():
+    if not current_user.is_admin:
+        flash('Access denied. Admin privileges required.', 'danger')
+        return redirect(url_for('index'))
+
+    from models import User
+    users = User.query.all()
+    return render_template('admin.html', users=users)
+
+@app.route('/admin/toggle/<int:user_id>', methods=['POST'])
+@login_required
+def toggle_admin(user_id):
+    if not current_user.is_admin:
+        flash('Access denied. Admin privileges required.', 'danger')
+        return redirect(url_for('index'))
+
+    from models import User
+    user = User.query.get_or_404(user_id)
+    if user.username == 'admin':
+        flash('Cannot modify admin status of default admin user.', 'danger')
+    else:
+        user.is_admin = not user.is_admin
+        db.session.commit()
+        flash(f"Admin status {'granted to' if user.is_admin else 'removed from'} {user.username}", 'success')
+    return redirect(url_for('admin'))
+
+@app.route('/change_password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    form = ChangePasswordForm()
+    if form.validate_on_submit():
+        if current_user.check_password(form.current_password.data):
+            current_user.set_password(form.new_password.data)
+            db.session.commit()
+            flash('Your password has been updated!', 'success')
+            return redirect(url_for('index'))
+        else:
+            flash('Invalid current password', 'danger')
+    return render_template('change_password.html', form=form)
 
 
 @app.route('/category/add', methods=['POST'])
@@ -386,7 +440,7 @@ def add_category():
     name = request.form.get('category_name')
     if name:
         try:
-            category = Category(name=name)
+            category = Category(name=name, user_id=current_user.id)
             db.session.add(category)
             db.session.commit()
             return jsonify({
@@ -415,3 +469,11 @@ with app.app_context():
     from models import Video, Category, User
     # Create all tables with proper schema
     db.create_all()
+
+    # Create default admin user if it doesn't exist
+    admin_user = User.query.filter_by(username='admin').first()
+    if not admin_user:
+        admin_user = User(username='admin', email='admin@example.com', is_admin=True)
+        admin_user.set_password('admin')
+        db.session.add(admin_user)
+        db.session.commit()

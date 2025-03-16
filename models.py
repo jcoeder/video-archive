@@ -13,6 +13,8 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(64), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256))
+    is_admin = db.Column(db.Boolean, default=False)
+    categories = db.relationship('Category', backref='user', lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -28,9 +30,12 @@ class Video(db.Model):
     notes = db.Column(db.Text)
     date_archived = db.Column(db.DateTime, default=datetime.utcnow)
     exists = db.Column(db.Boolean, default=True)  # Track if video file exists
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     categories = db.relationship('Category', secondary=video_categories, lazy='subquery',
         backref=db.backref('videos', lazy=True))
 
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), nullable=False, unique=True)
+    name = db.Column(db.String(50), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    __table_args__ = (db.UniqueConstraint('name', 'user_id', name='_user_category_uc'),)
