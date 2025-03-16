@@ -436,16 +436,19 @@ def upload_video():
 def video_detail(video_id):
     from models import Video, Category
     video = Video.query.get_or_404(video_id)
-    categories = Category.query.all()
+    categories = Category.query.filter_by(user_id=current_user.id).order_by(Category.name).all()
 
     if request.method == 'POST':
         video.notes = request.form.get('notes', '')
         video.categories = []
         for category_id in request.form.getlist('categories'):
             category = Category.query.get(category_id)
-            if category:
+            if category and category.user_id == current_user.id:
                 video.categories.append(category)
         db.session.commit()
+        if request.headers.get('Content-Type') == 'application/x-www-form-urlencoded':
+            # AJAX request
+            return jsonify({'success': True})
         flash('Video details updated successfully!', 'success')
         return redirect(url_for('video_detail', video_id=video_id))
 
