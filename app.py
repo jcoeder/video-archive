@@ -6,40 +6,14 @@ from datetime import datetime
 import cv2
 import threading
 import time
+import yt_dlp
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.utils import secure_filename
-from pytube import YouTube
-import urllib.parse
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from forms import LoginForm, RegisterForm, ChangePasswordForm, AdminUserCreateForm  # Added AdminUserCreateForm import
-
-def allowed_file(filename):
-    """Check if a filename has an allowed extension"""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-def calculate_file_hash(file_path):
-    """Calculate SHA-256 hash of a file"""
-    try:
-        sha256_hash = hashlib.sha256()
-        with open(file_path, "rb") as f:
-            # Read the file in chunks to handle large files
-            for byte_block in iter(lambda: f.read(4096), b""):
-                sha256_hash.update(byte_block)
-        return sha256_hash.hexdigest()
-    except Exception as e:
-        logging.error(f"Error calculating file hash: {str(e)}")
-        return None
-
-def check_duplicate_video(file_hash, user_id):
-    """Check if a video with the same hash exists for the user"""
-    from models import Video
-    return Video.query.filter_by(file_hash=file_hash, user_id=user_id).first()
-
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+from forms import LoginForm, RegisterForm, ChangePasswordForm, AdminUserCreateForm
+from flask_dropzone import Dropzone
 
 # Initialize Flask app
 class Base(DeclarativeBase):
@@ -47,6 +21,17 @@ class Base(DeclarativeBase):
 
 db = SQLAlchemy(model_class=Base)
 app = Flask(__name__)
+dropzone = Dropzone(app)
+
+# Configure Dropzone settings
+app.config['DROPZONE_ALLOWED_FILE_TYPES'] = ['video']
+app.config['DROPZONE_MAX_FILE_SIZE'] = 500  # MB
+app.config['DROPZONE_UPLOAD_MULTIPLE'] = True
+app.config['DROPZONE_PARALLEL_UPLOADS'] = 1
+app.config['DROPZONE_UPLOAD_ON_CLICK'] = False
+app.config['DROPZONE_IN_FORM'] = True
+app.config['DROPZONE_UPLOAD_ACTION'] = 'upload_video'
+
 app.secret_key = os.environ.get("SESSION_SECRET") or "dev-secret-key-change-in-production"
 
 # Configure the database
@@ -259,170 +244,187 @@ def index():
 def upload_video():
     from models import Video, Category
 
-    if 'video' not in request.files and 'youtube_url' not in request.form:
-        flash('No video file or YouTube URL provided', 'error')
-        return redirect(url_for('index'))
-
-    categories = request.form.getlist('categories')
-    notes = request.form.get('notes', '')
-
     try:
-        if 'video' in request.files:
-            file = request.files['video']
-            if file and allowed_file(file.filename):
-                original_filename = secure_filename(file.filename)
-                user_upload_folder = get_user_upload_folder(current_user)
+        # Get shared metadata for all uploads
+        categories = request.form.getlist('categories')
+        notes = request.form.get('notes', '')
 
-                # Save original file
-                original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
-                web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
-                web_filepath = os.path.join(user_upload_folder, web_filename)
-
-                os.makedirs(os.path.dirname(original_filepath), exist_ok=True)
-                file.save(original_filepath)
-
-                # Calculate file hash
-                file_hash = calculate_file_hash(original_filepath)
-                if file_hash:
-                    # Check for duplicates
-                    duplicate = check_duplicate_video(file_hash, current_user.id)
-                    if duplicate:
-                        try:
-                            os.remove(original_filepath)
-                        except Exception as e:
-                            logging.error(f"Error removing duplicate file: {str(e)}")
-                        flash('This video has already been uploaded.', 'warning')
-                        return redirect(url_for('video_detail', video_id=duplicate.id))
-
-                # Create web-optimized version
-                if transcode_video(original_filepath, web_filepath):
-                    # Generate thumbnail
-                    thumbnail_filename = f"video_{int(time.time())}_thumb.jpg"
-                    thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
-
-                    if generate_thumbnail(web_filepath, thumbnail_path):
-                        # Create database record
-                        video = Video(
-                            title=os.path.splitext(original_filename)[0],
-                            file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",
-                            thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
-                            notes=notes,
-                            date_archived=datetime.now(),
-                            user_id=current_user.id,
-                            file_hash=file_hash,
-                            exists=True
-                        )
-
-                        # Add categories
-                        for category_id in categories:
-                            category = Category.query.get(category_id)
-                            if category and category.user_id == current_user.id:
-                                video.categories.append(category)
-
-                        db.session.add(video)
-                        db.session.commit()
-                        flash('Video successfully uploaded!', 'success')
-                    else:
-                        try:
-                            os.remove(original_filepath)
-                            os.remove(web_filepath)
-                        except Exception as e:
-                            logging.error(f"Error cleaning up files: {str(e)}")
-                        flash('Error generating thumbnail', 'error')
-                else:
-                    try:
-                        os.remove(original_filepath)
-                    except Exception as e:
-                        logging.error(f"Error cleaning up original file: {str(e)}")
-                    flash('Error processing video file', 'error')
-
-        elif 'youtube_url' in request.form:
+        if 'youtube_url' in request.form:
             url = request.form['youtube_url']
             try:
-                yt = YouTube(url)
-                stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
+                # Configure yt-dlp options
+                ydl_opts = {
+                    'format': 'best[ext=mp4]',
+                    'outtmpl': 'temp_%(title)s.%(ext)s'
+                }
 
-                original_filename = secure_filename(yt.title + '.mp4')
-                user_upload_folder = get_user_upload_folder(current_user)
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    # Download video info first
+                    info = ydl.extract_info(url, download=False)
+                    title = info.get('title', '')
+                    original_filename = secure_filename(f"{title}.mp4")
+                    user_upload_folder = get_user_upload_folder(current_user)
 
-                # Save original file
-                original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
-                os.makedirs(os.path.dirname(original_filepath), exist_ok=True)
-                stream.download(filename=original_filepath)
+                    # Set the output path
+                    original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
+                    ydl_opts['outtmpl'] = original_filepath
 
-                # Calculate file hash
-                file_hash = calculate_file_hash(original_filepath)
-                if file_hash:
-                    # Check for duplicates
-                    duplicate = check_duplicate_video(file_hash, current_user.id)
-                    if duplicate:
-                        # Clean up the uploaded file
-                        try:
-                            os.remove(original_filepath)
-                        except Exception as e:
-                            logging.error(f"Error removing duplicate file: {str(e)}")
-                        flash('This video has already been uploaded.', 'warning')
-                        return redirect(url_for('video_detail', video_id=duplicate.id))
+                    # Download the video
+                    ydl.download([url])
 
-                # Create web-optimized version
-                web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
-                web_filepath = os.path.join(user_upload_folder, web_filename)
+                    # Calculate file hash
+                    file_hash = calculate_file_hash(original_filepath)
+                    if file_hash:
+                        # Check for duplicates
+                        duplicate = check_duplicate_video(file_hash, current_user.id)
+                        if duplicate:
+                            try:
+                                os.remove(original_filepath)
+                            except Exception as e:
+                                logging.error(f"Error removing duplicate file: {str(e)}")
+                            flash('This video has already been uploaded.', 'warning')
+                            return redirect(url_for('video_detail', video_id=duplicate.id))
 
-                if transcode_video(original_filepath, web_filepath):
-                    # Generate thumbnail with timestamp
-                    thumbnail_filename = f"{os.path.splitext(web_filename)[0]}_{int(time.time())}_thumb.jpg"
-                    thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
+                    # Create web-optimized version
+                    web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
+                    web_filepath = os.path.join(user_upload_folder, web_filename)
 
-                    if generate_thumbnail(web_filepath, thumbnail_path):
-                        video = Video(
-                            title=yt.title,
-                            file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",  # Store web version path
-                            thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
-                            notes=notes,
-                            date_archived=datetime.now(),
-                            user_id=current_user.id,
-                            file_hash=file_hash
-                        )
+                    if transcode_video(original_filepath, web_filepath):
+                        # Generate thumbnail
+                        thumbnail_filename = f"video_{int(time.time())}_thumb.jpg"
+                        thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
 
-                        # Add categories
-                        for category_id in categories:
-                            category = Category.query.get(category_id)
-                            if category and category.user_id == current_user.id:
-                                video.categories.append(category)
+                        if generate_thumbnail(web_filepath, thumbnail_path):
+                            video = Video(
+                                title=title,
+                                file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",
+                                thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
+                                notes=notes,
+                                date_archived=datetime.now(),
+                                user_id=current_user.id,
+                                file_hash=file_hash
+                            )
 
-                        db.session.add(video)
-                        db.session.commit()
+                            # Add categories
+                            for category_id in categories:
+                                category = Category.query.get(category_id)
+                                if category and category.user_id == current_user.id:
+                                    video.categories.append(category)
 
-                        flash('Video successfully archived!', 'success')
+                            db.session.add(video)
+                            db.session.commit()
+                            flash('Video successfully archived!', 'success')
+                        else:
+                            cleanup_files([original_filepath, web_filepath])
+                            flash('Error generating thumbnail', 'error')
                     else:
-                        # Clean up files on thumbnail generation failure
-                        try:
-                            os.remove(original_filepath)
-                            os.remove(web_filepath)
-                        except Exception as e:
-                            logging.error(f"Error cleaning up files: {str(e)}")
-                        flash('Error generating thumbnail', 'error')
-                        return redirect(url_for('index'))
-                else:
-                    # Clean up original file on transcoding failure
-                    try:
-                        os.remove(original_filepath)
-                    except Exception as e:
-                        logging.error(f"Error cleaning up original file: {str(e)}")
-                    flash('Error processing YouTube video', 'error')
-                    return redirect(url_for('index'))
+                        cleanup_files([original_filepath])
+                        flash('Error processing YouTube video', 'error')
 
             except Exception as e:
                 logging.error(f"Error downloading YouTube video: {str(e)}")
                 flash('Error downloading YouTube video. Please try again.', 'error')
                 return redirect(url_for('index'))
 
+        elif request.files:
+            # Handle multiple file uploads
+            for key, file in request.files.items():
+                if file and allowed_file(file.filename):
+                    original_filename = secure_filename(file.filename)
+                    user_upload_folder = get_user_upload_folder(current_user)
+
+                    # Save original file
+                    original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
+                    web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
+                    web_filepath = os.path.join(user_upload_folder, web_filename)
+
+                    os.makedirs(os.path.dirname(original_filepath), exist_ok=True)
+                    file.save(original_filepath)
+
+                    # Calculate file hash
+                    file_hash = calculate_file_hash(original_filepath)
+                    if file_hash:
+                        # Check for duplicates
+                        duplicate = check_duplicate_video(file_hash, current_user.id)
+                        if duplicate:
+                            cleanup_files([original_filepath])
+                            continue  # Skip this file and process the next one
+
+                    # Create web-optimized version
+                    if transcode_video(original_filepath, web_filepath):
+                        # Generate thumbnail
+                        thumbnail_filename = f"video_{int(time.time())}_thumb.jpg"
+                        thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
+
+                        if generate_thumbnail(web_filepath, thumbnail_path):
+                            video = Video(
+                                title=os.path.splitext(original_filename)[0],
+                                file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",
+                                thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
+                                notes=notes,
+                                date_archived=datetime.now(),
+                                user_id=current_user.id,
+                                file_hash=file_hash
+                            )
+
+                            # Add categories
+                            for category_id in categories:
+                                category = Category.query.get(category_id)
+                                if category and category.user_id == current_user.id:
+                                    video.categories.append(category)
+
+                            db.session.add(video)
+                            db.session.commit()
+                        else:
+                            cleanup_files([original_filepath, web_filepath])
+                            flash(f'Error generating thumbnail for {original_filename}', 'error')
+                    else:
+                        cleanup_files([original_filepath])
+                        flash(f'Error processing {original_filename}', 'error')
+
+        return redirect(url_for('index'))
+
     except Exception as e:
         logging.error(f"Error uploading video: {str(e)}")
         flash('Error uploading video. Please try again.', 'error')
         db.session.rollback()
+        return redirect(url_for('index'))
 
-    return redirect(url_for('index'))
+def cleanup_files(file_paths):
+    """Helper function to clean up files"""
+    for path in file_paths:
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception as e:
+            logging.error(f"Error removing file {path}: {str(e)}")
+
+def allowed_file(filename):
+    """Check if a filename has an allowed extension"""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def calculate_file_hash(file_path):
+    """Calculate SHA-256 hash of a file"""
+    try:
+        sha256_hash = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            # Read the file in chunks to handle large files
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
+    except Exception as e:
+        logging.error(f"Error calculating file hash: {str(e)}")
+        return None
+
+def check_duplicate_video(file_hash, user_id):
+    """Check if a video with the same hash exists for the user"""
+    from models import Video
+    return Video.query.filter_by(file_hash=file_hash, user_id=user_id).first()
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 
 @app.route('/video/<int:video_id>', methods=['GET', 'POST'])
 @login_required
@@ -831,3 +833,6 @@ with app.app_context():
 
     # Start background sync thread
     start_background_sync()
+
+if __name__ == '__main__':
+    app.run(debug=True)
