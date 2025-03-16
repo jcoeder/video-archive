@@ -7,6 +7,10 @@
     cursor: pointer;
     transition: all 0.3s ease;
     position: relative;
+    min-height: 400px; /* Increased default height */
+    display: flex;     /* Added to help with centering */
+    align-items: center;
+    justify-content: center;
 }
 
 .dropzone:hover,
@@ -63,7 +67,10 @@
     justify-content: center;
     z-index: 0;
     pointer-events: none;
-    min-height: 300px;
+}
+
+.dropzone.dz-started {
+    display: block; /* Change to block when files are added */
 }
 
 .dropzone.dz-started .dz-message {
@@ -94,6 +101,7 @@
 
 .upload-message {
     text-align: center;
+    width: 100%;
 }
 
 .upload-icon {
@@ -112,20 +120,6 @@
     padding: 1rem;
     background: var(--bs-dark);
     border-radius: 6px;
-}
-
-.upload-progress-bar {
-    height: 4px;
-    background: var(--bs-gray-700);
-    border-radius: 2px;
-    margin: 0.5rem 0;
-    overflow: hidden;
-}
-
-.upload-progress-bar .progress {
-    height: 100%;
-    background: var(--bs-primary);
-    transition: width 0.3s ease-in-out;
 }
 
 /* Video card and preview styles */
