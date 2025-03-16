@@ -12,10 +12,11 @@ from werkzeug.utils import secure_filename
 from pytube import YouTube
 import urllib.parse
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from forms import LoginForm, RegisterForm
+from forms import LoginForm, RegisterForm  # Re-add the forms import
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 class Base(DeclarativeBase):
@@ -23,7 +24,7 @@ class Base(DeclarativeBase):
 
 db = SQLAlchemy(model_class=Base)
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET")
+app.secret_key = os.environ.get("SESSION_SECRET") or "dev-secret-key-change-in-production"
 
 # Configure the database
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
@@ -43,7 +44,21 @@ UPLOAD_FOLDER = 'static/uploads'
 THUMBNAIL_FOLDER = 'static/thumbnails'
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm'}
 
-# Create necessary directories
+def get_user_upload_folder(user_id):
+    """Get user-specific upload folder path"""
+    folder = os.path.join(UPLOAD_FOLDER, str(user_id))
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    return folder
+
+def get_user_thumbnail_folder(user_id):
+    """Get user-specific thumbnail folder path"""
+    folder = os.path.join(THUMBNAIL_FOLDER, str(user_id))
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    return folder
+
+# Create base directories
 for folder in [UPLOAD_FOLDER, THUMBNAIL_FOLDER]:
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -58,34 +73,42 @@ def load_user(id):
 
 def scan_video_directory():
     """Scan upload directory and update database"""
-    from models import Video
+    from models import Video, User
     while True:
         with app.app_context():
-            # Check existing videos
-            all_videos = Video.query.all()
-            for video in all_videos:
-                video_path = os.path.join('static', video.file_path)
-                video.exists = os.path.exists(video_path)
+            try:
+                # Check existing videos
+                all_videos = Video.query.all()
+                for video in all_videos:
+                    video_path = os.path.join('static', video.file_path)
+                    video.exists = os.path.exists(video_path)
 
-            # Scan for new videos
-            for filename in os.listdir(UPLOAD_FOLDER):
-                if filename.endswith(tuple(ALLOWED_EXTENSIONS)):
-                    filepath = os.path.join('uploads', filename)
-                    existing_video = Video.query.filter_by(file_path=filepath).first()
-                    if not existing_video:
-                        # Create thumbnail
-                        thumbnail_filename = f"{os.path.splitext(filename)[0]}_thumb.jpg"
-                        thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail_filename)
-                        if generate_thumbnail(os.path.join(UPLOAD_FOLDER, filename), thumbnail_path):
-                            video = Video(
-                                title=os.path.splitext(filename)[0],
-                                file_path=filepath,
-                                thumbnail_path=f"thumbnails/{thumbnail_filename}",
-                                date_archived=datetime.now()
-                            )
-                            db.session.add(video)
+                # Scan for new videos - per user directory
+                users = User.query.all()
+                for user in users:
+                    user_upload_dir = get_user_upload_folder(user.id)
+                    if os.path.exists(user_upload_dir):
+                        for filename in os.listdir(user_upload_dir):
+                            if filename.endswith(tuple(ALLOWED_EXTENSIONS)):
+                                filepath = os.path.join('uploads', str(user.id), filename)
+                                existing_video = Video.query.filter_by(file_path=filepath).first()
+                                if not existing_video:
+                                    # Create thumbnail
+                                    thumbnail_filename = f"{os.path.splitext(filename)[0]}_thumb.jpg"
+                                    thumbnail_path = os.path.join(get_user_thumbnail_folder(user.id), thumbnail_filename)
+                                    if generate_thumbnail(os.path.join(user_upload_dir, filename), thumbnail_path):
+                                        video = Video(
+                                            title=os.path.splitext(filename)[0],
+                                            file_path=filepath,
+                                            thumbnail_path=f"thumbnails/{user.id}/{thumbnail_filename}",
+                                            date_archived=datetime.now()
+                                        )
+                                        db.session.add(video)
 
-            db.session.commit()
+                db.session.commit()
+            except Exception as e:
+                logging.error(f"Error in scan_video_directory: {str(e)}")
+
         time.sleep(300)  # Check every 5 minutes
 
 # Start scanning thread
@@ -154,39 +177,56 @@ def generate_thumbnail(video_path, output_path):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
-    form = LoginForm()
-    if form.validate_on_submit():
-        from models import User
-        user = User.query.filter_by(username=form.username.data).first()
-        if user is None or not user.check_password(form.password.data):
-            flash('Invalid username or password', 'danger')
-            return redirect(url_for('login'))
-        login_user(user)
-        return redirect(url_for('index'))
-    return render_template('login.html', form=form)
+    try:
+        if current_user.is_authenticated:
+            return redirect(url_for('index'))
+
+        form = LoginForm()
+        if form.validate_on_submit():
+            from models import User
+            user = User.query.filter_by(username=form.username.data).first()
+            if user is None or not user.check_password(form.password.data):
+                flash('Invalid username or password', 'danger')
+                return redirect(url_for('login'))
+
+            login_user(user)
+            return redirect(url_for('index'))
+
+        return render_template('login.html', form=form)
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        flash('An error occurred during login', 'danger')
+        return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
-    form = RegisterForm()
-    if form.validate_on_submit():
-        from models import User
-        if User.query.filter_by(username=form.username.data).first():
-            flash('Username already exists', 'danger')
-            return redirect(url_for('register'))
-        if User.query.filter_by(email=form.email.data).first():
-            flash('Email already registered', 'danger')
-            return redirect(url_for('register'))
-        user = User(username=form.username.data, email=form.email.data)
-        user.set_password(form.password.data)
-        db.session.add(user)
-        db.session.commit()
-        flash('Registration successful!', 'success')
-        return redirect(url_for('login'))
-    return render_template('register.html', form=form)
+    try:
+        if current_user.is_authenticated:
+            return redirect(url_for('index'))
+
+        form = RegisterForm()
+        if form.validate_on_submit():
+            from models import User
+            if User.query.filter_by(username=form.username.data).first():
+                flash('Username already exists', 'danger')
+                return redirect(url_for('register'))
+            if User.query.filter_by(email=form.email.data).first():
+                flash('Email already registered', 'danger')
+                return redirect(url_for('register'))
+
+            user = User(username=form.username.data, email=form.email.data)
+            user.set_password(form.password.data)
+            db.session.add(user)
+            db.session.commit()
+
+            flash('Registration successful!', 'success')
+            return redirect(url_for('login'))
+
+        return render_template('register.html', form=form)
+    except Exception as e:
+        logger.error(f"Registration error: {str(e)}")
+        flash('An error occurred during registration', 'danger')
+        return redirect(url_for('register'))
 
 @app.route('/logout')
 def logout():
@@ -218,23 +258,24 @@ def upload_video():
             file = request.files['video']
             if file and allowed_file(file.filename):
                 original_filename = secure_filename(file.filename)
-                original_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"original_{original_filename}")
+                user_upload_folder = get_user_upload_folder(current_user.id)
+                original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
                 file.save(original_filepath)
 
                 # Transcode to web-compatible format
                 final_filename = f"web_{original_filename.rsplit('.', 1)[0]}.mp4"
-                final_filepath = os.path.join(app.config['UPLOAD_FOLDER'], final_filename)
+                final_filepath = os.path.join(user_upload_folder, final_filename)
 
                 if transcode_video(original_filepath, final_filepath):
                     # Generate thumbnail from transcoded video
                     thumbnail_filename = f"{os.path.splitext(final_filename)[0]}_thumb.jpg"
-                    thumbnail_path = os.path.join(app.config['THUMBNAIL_FOLDER'], thumbnail_filename)
+                    thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user.id), thumbnail_filename)
                     generate_thumbnail(final_filepath, thumbnail_path)
 
                     video = Video(
                         title=os.path.splitext(original_filename)[0],
-                        file_path=f"uploads/{final_filename}",  # Store relative path
-                        thumbnail_path=f"thumbnails/{thumbnail_filename}",  # Store relative path
+                        file_path=f"uploads/{current_user.id}/{final_filename}",  # Store relative path
+                        thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",  # Store relative path
                         notes=notes,
                         date_archived=datetime.now()
                     )
@@ -250,23 +291,24 @@ def upload_video():
             yt = YouTube(url)
             stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
             original_filename = secure_filename(yt.title + '.mp4')
-            original_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"original_{original_filename}")
-            stream.download(output_path=app.config['UPLOAD_FOLDER'], filename=f"original_{original_filename}")
+            user_upload_folder = get_user_upload_folder(current_user.id)
+            original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
+            stream.download(filename=original_filepath)
 
             # Transcode YouTube video
             final_filename = f"web_{original_filename}"
-            final_filepath = os.path.join(app.config['UPLOAD_FOLDER'], final_filename)
+            final_filepath = os.path.join(user_upload_folder, final_filename)
 
             if transcode_video(original_filepath, final_filepath):
                 # Generate thumbnail for YouTube video
                 thumbnail_filename = f"{os.path.splitext(final_filename)[0]}_thumb.jpg"
-                thumbnail_path = os.path.join(app.config['THUMBNAIL_FOLDER'], thumbnail_filename)
+                thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user.id), thumbnail_filename)
                 generate_thumbnail(final_filepath, thumbnail_path)
 
                 video = Video(
                     title=yt.title,
-                    file_path=f"uploads/{final_filename}",  # Store relative path
-                    thumbnail_path=f"thumbnails/{thumbnail_filename}",  # Store relative path
+                    file_path=f"uploads/{current_user.id}/{final_filename}",  # Store relative path
+                    thumbnail_path=f"thumbnails/{current_user.id}/{thumbnail_filename}",  # Store relative path
                     notes=notes,
                     date_archived=datetime.now()
                 )
@@ -362,9 +404,14 @@ def add_category():
         'error': 'Category name is required'
     })
 
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"Internal Server Error: {str(error)}")
+    db.session.rollback()
+    return "Internal Server Error", 500
+
 with app.app_context():
     # Import models so they can be created
     from models import Video, Category, User
-    # Create all tables
-    db.drop_all()  # Drop all tables to ensure clean state
-    db.create_all()  # Recreate all tables with proper schema
+    # Create all tables with proper schema
+    db.create_all()
