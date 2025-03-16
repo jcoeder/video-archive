@@ -10,11 +10,10 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.utils import secure_filename
-import yt_dlp
+from pytube import YouTube
 import urllib.parse
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-
-# ... (keep existing imports and configuration)
+from forms import LoginForm, RegisterForm, ChangePasswordForm, AdminUserCreateForm  # Added AdminUserCreateForm import
 
 def allowed_file(filename):
     """Check if a filename has an allowed extension"""
@@ -258,7 +257,7 @@ def index():
 @app.route('/upload', methods=['POST'])
 @login_required
 def upload_video():
-    from models import Video, Category, Job
+    from models import Video, Category
 
     if 'video' not in request.files and 'youtube_url' not in request.form:
         flash('No video file or YouTube URL provided', 'error')
@@ -268,26 +267,7 @@ def upload_video():
     notes = request.form.get('notes', '')
 
     try:
-        if 'youtube_url' in request.form and request.form['youtube_url']:
-            # Create a background job for YouTube download
-            job = Job(
-                user_id=current_user.id,
-                job_type='youtube_download',
-                status='pending',
-                youtube_url=request.form['youtube_url']
-            )
-            db.session.add(job)
-            db.session.commit()
-
-            # Start background thread for download
-            thread = threading.Thread(target=download_youtube_video, args=(job.id,))
-            thread.daemon = True
-            thread.start()
-
-            flash('YouTube download started. Check Jobs tab for status.', 'info')
-            return redirect(url_for('jobs'))
-
-        elif 'video' in request.files:
+        if 'video' in request.files:
             file = request.files['video']
             if file and allowed_file(file.filename):
                 original_filename = secure_filename(file.filename)
@@ -355,6 +335,87 @@ def upload_video():
                     except Exception as e:
                         logging.error(f"Error cleaning up original file: {str(e)}")
                     flash('Error processing video file', 'error')
+
+        elif 'youtube_url' in request.form:
+            url = request.form['youtube_url']
+            try:
+                yt = YouTube(url)
+                stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
+
+                original_filename = secure_filename(yt.title + '.mp4')
+                user_upload_folder = get_user_upload_folder(current_user)
+
+                # Save original file
+                original_filepath = os.path.join(user_upload_folder, f"original_{original_filename}")
+                os.makedirs(os.path.dirname(original_filepath), exist_ok=True)
+                stream.download(filename=original_filepath)
+
+                # Calculate file hash
+                file_hash = calculate_file_hash(original_filepath)
+                if file_hash:
+                    # Check for duplicates
+                    duplicate = check_duplicate_video(file_hash, current_user.id)
+                    if duplicate:
+                        # Clean up the uploaded file
+                        try:
+                            os.remove(original_filepath)
+                        except Exception as e:
+                            logging.error(f"Error removing duplicate file: {str(e)}")
+                        flash('This video has already been uploaded.', 'warning')
+                        return redirect(url_for('video_detail', video_id=duplicate.id))
+
+                # Create web-optimized version
+                web_filename = f"web_{os.path.splitext(original_filename)[0]}.mp4"
+                web_filepath = os.path.join(user_upload_folder, web_filename)
+
+                if transcode_video(original_filepath, web_filepath):
+                    # Generate thumbnail with timestamp
+                    thumbnail_filename = f"{os.path.splitext(web_filename)[0]}_{int(time.time())}_thumb.jpg"
+                    thumbnail_path = os.path.join(get_user_thumbnail_folder(current_user), thumbnail_filename)
+
+                    if generate_thumbnail(web_filepath, thumbnail_path):
+                        video = Video(
+                            title=yt.title,
+                            file_path=f"uploads/{current_user.get_storage_path()}/{web_filename}",  # Store web version path
+                            thumbnail_path=f"thumbnails/{current_user.get_storage_path()}/{thumbnail_filename}",
+                            notes=notes,
+                            date_archived=datetime.now(),
+                            user_id=current_user.id,
+                            file_hash=file_hash
+                        )
+
+                        # Add categories
+                        for category_id in categories:
+                            category = Category.query.get(category_id)
+                            if category and category.user_id == current_user.id:
+                                video.categories.append(category)
+
+                        db.session.add(video)
+                        db.session.commit()
+
+                        flash('Video successfully archived!', 'success')
+                    else:
+                        # Clean up files on thumbnail generation failure
+                        try:
+                            os.remove(original_filepath)
+                            os.remove(web_filepath)
+                        except Exception as e:
+                            logging.error(f"Error cleaning up files: {str(e)}")
+                        flash('Error generating thumbnail', 'error')
+                        return redirect(url_for('index'))
+                else:
+                    # Clean up original file on transcoding failure
+                    try:
+                        os.remove(original_filepath)
+                    except Exception as e:
+                        logging.error(f"Error cleaning up original file: {str(e)}")
+                    flash('Error processing YouTube video', 'error')
+                    return redirect(url_for('index'))
+
+            except Exception as e:
+                logging.error(f"Error downloading YouTube video: {str(e)}")
+                flash('Error downloading YouTube video. Please try again.', 'error')
+                return redirect(url_for('index'))
 
     except Exception as e:
         logging.error(f"Error uploading video: {str(e)}")
@@ -670,171 +731,6 @@ def download_content():
         download_name=f'video_archive_{timestamp}.zip'
     )
 
-@app.route('/jobs')
-@login_required
-def jobs():
-    from models import Job
-    user_jobs = Job.query.filter_by(user_id=current_user.id).order_by(Job.created_at.desc()).all()
-    return render_template('jobs.html', jobs=user_jobs)
-
-@app.errorhandler(500)
-def internal_error(error):
-    logger.error(f"Internal Server Error: {str(error)}")
-    db.session.rollback()
-    return "Internal Server Error", 500
-
-def check_and_sync_video_files():
-    """Check video files and sync status in database"""
-    from models import Video
-    logging.info("Running periodic video file check...")
-
-    try:
-        videos = Video.query.all()
-        for video in videos:
-            user_upload_folder = get_user_upload_folder(video.user)
-            user_thumbnail_folder = get_user_thumbnail_folder(video.user)
-
-            # Get file paths
-            web_file = os.path.join('static', video.file_path)
-            web_filename = os.path.basename(video.file_path)
-
-            # Handle original filename (remove 'web_' if present)
-            original_filename = web_filename
-            if original_filename.startswith('web_'):
-                original_filename = original_filename[4:]  # Remove 'web_' prefix
-
-            original_file = os.path.join('static/uploads', video.user.get_storage_path(), f"original_{original_filename}")
-            thumbnail_file = os.path.join('static', video.thumbnail_path) if video.thumbnail_path else None
-
-            # Check if both video files are missing
-            if not os.path.exists(web_file) and not os.path.exists(original_file):
-                video.exists = False
-                # Remove thumbnail if it exists
-                if thumbnail_file and os.path.exists(thumbnail_file):
-                    try:
-                        os.remove(thumbnail_file)
-                        video.thumbnail_path = None
-                        logging.info(f"Removed thumbnail for missing video {video.id}")
-                    except Exception as e:
-                        logging.error(f"Errorremoving thumbnail for video {video.id}: {str(e)}")
-            else:
-                # If original exists but web version is missing, create it
-                if os.path.exists(original_file) and not os.path.exists(web_file):
-                    logging.info(f"Regenerating web version for video {video.id}")
-                    if transcode_video(original_file, web_file):
-                        video.exists = True
-                    else:
-                        logging.error(f"Failed to generate web version for video {video.id}")
-
-                # If web exists but original is missing, restore it
-                if os.path.exists(web_file) and not os.path.exists(original_file):
-                    logging.info(f"Copying web version to original for video {video.id}")
-                    try:
-                        os.makedirs(os.path.dirname(original_file), exist_ok=True)
-                        import shutil
-                        shutil.copy2(web_file, original_file)
-                        logging.info(f"Successfully restored original file: {original_file}")
-                    except Exception as e:
-                        logging.error(f"Error copying web to original for video {video.id}: {str(e)}")
-
-            db.session.commit()
-
-    except Exception as e:
-        logging.error(f"Error in check_and_sync_video_files: {str(e)}")
-        db.session.rollback()
-
-def start_background_sync():
-    """Start background thread for periodic file checks"""
-    def run_periodic_check():
-        while True:
-            with app.app_context():
-                check_and_sync_video_files()
-            time.sleep(60)  # Wait for 1 minute
-
-    sync_thread = threading.Thread(target=run_periodic_check, daemon=True)
-    sync_thread.start()
-
-def download_youtube_video(job_id):
-    """Background worker function to download YouTube videos using yt-dlp"""
-    from models import Job, Video
-    with app.app_context():
-        job = Job.query.get(job_id)
-        if not job:
-            return
-
-        try:
-            job.status = 'processing'
-            db.session.commit()
-
-            user_upload_folder = get_user_upload_folder(job.user)
-            os.makedirs(user_upload_folder, exist_ok=True)
-
-            # Configure yt-dlp options
-            timestamp = int(time.time())
-            output_template = os.path.join(user_upload_folder, f'original_%(title)s_{timestamp}.%(ext)s')
-
-            ydl_opts = {
-                'format': 'best[ext=mp4]',
-                'outtmpl': output_template,
-                'quiet': True,
-                'no_warnings': True,
-                'extract_flat': False,
-                'progress_hooks': []
-            }
-
-            # Download the video
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(job.youtube_url, download=True)
-                filename = ydl.prepare_filename(info)
-
-            # Create web-optimized version
-            web_filename = f"web_{os.path.basename(filename)}"
-            web_filepath = os.path.join(user_upload_folder, web_filename)
-
-            if transcode_video(filename, web_filepath):
-                # Generate thumbnail
-                thumbnail_filename = f"video_{timestamp}_thumb.jpg"
-                thumbnail_path = os.path.join(get_user_thumbnail_folder(job.user), thumbnail_filename)
-
-                if generate_thumbnail(web_filepath, thumbnail_path):
-                    # Calculate file hash
-                    file_hash = calculate_file_hash(filename)
-
-                    # Create video record
-                    video = Video(
-                        title=info.get('title', os.path.splitext(os.path.basename(filename))[0]),
-                        file_path=f"uploads/{job.user.get_storage_path()}/{web_filename}",
-                        thumbnail_path=f"thumbnails/{job.user.get_storage_path()}/{thumbnail_filename}",
-                        notes=f"Downloaded from YouTube: {job.youtube_url}",
-                        date_archived=datetime.now(),
-                        user_id=job.user_id,
-                        file_hash=file_hash
-                    )
-
-                    db.session.add(video)
-                    job.status = 'completed'
-                    job.result = f"Video saved: {video.title}"
-                else:
-                    job.status = 'failed'
-                    job.result = 'Failed to generate thumbnail'
-            else:
-                job.status = 'failed'
-                job.result = 'Failed to process video'
-
-        except Exception as e:
-            logging.error(f"Error downloading YouTube video: {str(e)}")
-            job.status = 'failed'
-            job.result = str(e)
-
-        db.session.commit()
-
-@app.route('/jobs')
-@login_required
-def jobs():
-    from models import Job
-    user_jobs = Job.query.filter_by(user_id=current_user.id).order_by(Job.created_at.desc()).all()
-    return render_template('jobs.html', jobs=user_jobs)
-
 @app.errorhandler(500)
 def internal_error(error):
     logger.error(f"Internal Server Error: {str(error)}")
@@ -915,7 +811,7 @@ def start_background_sync():
 # Initialize database and start background sync
 with app.app_context():
     # Import models
-    from models import Video, Category, User, Job
+    from models import Video, Category, User
 
     # Create all tables with proper schema
     db.create_all()
