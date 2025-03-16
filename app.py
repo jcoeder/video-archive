@@ -95,14 +95,15 @@ def scan_video_directory():
                                 existing_video = Video.query.filter_by(file_path=filepath).first()
                                 if not existing_video:
                                     # Create thumbnail
-                                    thumbnail_filename = f"{os.path.splitext(filename)[0]}_thumb.jpg"
+                                    thumbnail_filename = f"{os.path.splitext(filename)[0]}_{int(time.time())}_thumb.jpg"
                                     thumbnail_path = os.path.join(get_user_thumbnail_folder(user.id), thumbnail_filename)
                                     if generate_thumbnail(os.path.join(user_upload_dir, filename), thumbnail_path):
                                         video = Video(
                                             title=os.path.splitext(filename)[0],
                                             file_path=filepath,
                                             thumbnail_path=f"thumbnails/{user.id}/{thumbnail_filename}",
-                                            date_archived=datetime.now()
+                                            date_archived=datetime.now(),
+                                            user_id=user.id
                                         )
                                         db.session.add(video)
 
@@ -112,16 +113,15 @@ def scan_video_directory():
 
         time.sleep(300)  # Check every 5 minutes
 
-# Start scanning thread
-scanning_thread = threading.Thread(target=scan_video_directory, daemon=True)
-scanning_thread.start()
-
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def transcode_video(input_path, output_path):
     """Transcode video to web-compatible format (MP4/H.264)"""
     try:
+        # Ensure the output directory exists
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
         cmd = [
             'ffmpeg', '-i', input_path,
             '-c:v', 'libx264',  # Video codec
@@ -147,6 +147,9 @@ def transcode_video(input_path, output_path):
 
 def generate_thumbnail(video_path, output_path):
     try:
+        # Ensure the output directory exists
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
         cap = cv2.VideoCapture(video_path)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
@@ -463,6 +466,10 @@ def internal_error(error):
     logger.error(f"Internal Server Error: {str(error)}")
     db.session.rollback()
     return "Internal Server Error", 500
+
+# Start scanning thread
+scanning_thread = threading.Thread(target=scan_video_directory, daemon=True)
+scanning_thread.start()
 
 with app.app_context():
     # Import models so they can be created
