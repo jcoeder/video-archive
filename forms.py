@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, EmailField, BooleanField, TextAreaField, URLField
-from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional, URL
+from wtforms import StringField, PasswordField, BooleanField, SubmitField, SelectMultipleField
+from wtforms.validators import DataRequired, Email, EqualTo, Length
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
@@ -9,29 +9,24 @@ class LoginForm(FlaskForm):
 
 class RegisterForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=4, max=64)])
-    email = EmailField('Email', validators=[Optional(), Email()])  # Made email optional
+    email = StringField('Email', validators=[DataRequired(), Email()])
     password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
     submit = SubmitField('Register')
 
-class AdminUserCreateForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired(), Length(min=4, max=64)])
-    email = EmailField('Email', validators=[Optional(), Email()])
-    password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
-    is_admin = BooleanField('Make Admin')
-    submit = SubmitField('Create User')
-
 class ChangePasswordForm(FlaskForm):
     current_password = PasswordField('Current Password', validators=[DataRequired()])
-    new_password = PasswordField('New Password', validators=[
-        DataRequired(),
-        Length(min=6, message='Password must be at least 6 characters long')
-    ])
-    confirm_password = PasswordField('Confirm New Password', validators=[
-        DataRequired(),
-        EqualTo('new_password', message='Passwords must match')
-    ])
+    new_password = PasswordField('New Password', validators=[DataRequired(), Length(min=6)])
+    confirm_password = PasswordField('Confirm New Password', validators=[DataRequired(), EqualTo('new_password')])
     submit = SubmitField('Change Password')
 
+class AdminUserCreateForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), Length(min=4, max=64)])
+    email = StringField('Email', validators=[Email()])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
+    is_admin = BooleanField('Admin Privileges')
+    submit = SubmitField('Create User')
+
 class UploadForm(FlaskForm):
-    youtube_url = URLField('YouTube URL', validators=[Optional(), URL()])
-    notes = TextAreaField('Notes')
+    categories = SelectMultipleField('Categories', coerce=int)  # Assumes dynamic choices set in route
+    notes = StringField('Notes')
+    submit = SubmitField('Upload')

@@ -1,0 +1,12 @@
+wheel
+flask
+flask-login
+flask-wtf
+flask-dropzone
+gunicorn
+opencv-python
+opencv-python-headless
+flask-sqlalchemy
+psycopg2-binary
+werkzeug
+wtforms
