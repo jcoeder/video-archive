@@ -1,21 +1,27 @@
 server {
     listen 80;
-    server_name 172.25.33.215;
-
-    location = /favicon.ico { access_log off; log_not_found off; }
+    server_name 172.25.33.215;  # Replace with your actual domain                                                                                                                                               # Optional: Add location for static files
     location /static/ {
-        root /home/justin/video-archive;
+        alias /home/justin/video-archive/static/;  # Replace with absolute path to your static folder          expires 30d;                                                                                          access_log off;
     }
 
+    # Proxy requests to Gunicorn
     location / {
-        proxy_pass_header Server;
-        proxy_set_header Host $http_host;
-        proxy_redirect off;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Scheme $scheme;
-        proxy_connect_timeout 10;
-        proxy_read_timeout 10;
+        proxy_pass http://127.0.0.1:5000;  # Default Gunicorn port, adjust if different
+        proxy_set_header Host $host;                                                                          proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+                                                                                                              # WebSocket support (if needed)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
 
-        proxy_pass http://127.0.0.1:5000/;
-    }
-}
+	# Upload-specific settings
+        client_max_body_size 0;  # Increase for video uploads
+        proxy_read_timeout 86400;     # Allow time for large uploads
+        proxy_connect_timeout 86400;
+        proxy_send_timeout 86400;
+    }                                                                                                                                                                                                           # Error logging
+    error_log /var/log/nginx/video-archive-error.log;
+    access_log /var/log/nginx/video-archive-access.log;
+}  
