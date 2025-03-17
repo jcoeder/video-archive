@@ -552,6 +552,9 @@ def init_app():
             logging.info("Admin user already exists.")
         start_background_sync()
 
+# Call init_app() when the module is imported
+init_app()
+
 if __name__ == '__main__':
-    init_app()
-    app.run(debug=True)
+    # Optional: Keep this for local testing with Flask's server
+    app.run(host='0.0.0.0', port=5000, debug=True)
