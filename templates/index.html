@@ -176,7 +176,7 @@ const myDropzone = new Dropzone("#uploadForm", {
     init: function() {
         this.on("sending", function(file, xhr, formData) {
             // Add CSRF token to the request
-            const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            const token = document.querySelector('input[name="csrf_token"]').value;
             formData.append("csrf_token", token);
 
             // Add additional form data
@@ -188,14 +188,22 @@ const myDropzone = new Dropzone("#uploadForm", {
             categories.forEach(cat => formData.append('categories', cat));
         });
 
+        this.on("error", function(file, errorMessage) {
+            console.error("Upload error:", errorMessage);
+            const statusText = document.querySelector('#overall-upload-status .status-text');
+            statusText.textContent = 'Upload failed. Please try again.';
+            const uploadButton = document.getElementById('uploadButton');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            uploadButton.disabled = false;
+            loadingSpinner.classList.add('d-none');
+        });
+
         this.on("removedfile", function(file) {
             if (this.files.length === 0) {
-                // Show the upload message when all files are removed
                 const message = document.querySelector('.dz-default.dz-message');
                 if (message) {
                     message.style.display = 'flex';
                 }
-                // Reset the dropzone display to flex for proper centering
                 this.element.style.display = 'flex';
             }
         });
@@ -207,21 +215,29 @@ function processUploads() {
     const loadingSpinner = document.getElementById('loadingSpinner');
     const uploadStatus = document.querySelector('#overall-upload-status .status-text');
     const progressContainer = document.getElementById('overall-upload-status');
+    const progressBar = progressContainer.querySelector('.progress-bar');
 
+    // Reset progress bar and status
+    progressBar.style.width = '0%';
+    uploadStatus.textContent = 'Starting upload...';
+
+    // Show progress container and disable button
+    progressContainer.classList.remove('d-none');
     uploadButton.disabled = true;
     loadingSpinner.classList.remove('d-none');
-    progressContainer.classList.remove('d-none');
 
     if (myDropzone.files.length > 0) {
-        uploadStatus.textContent = 'Starting upload...';
         myDropzone.processQueue();
+    } else {
+        uploadStatus.textContent = 'Please add files to upload.';
+        uploadButton.disabled = false;
+        loadingSpinner.classList.add('d-none');
     }
 }
 
 // Dropzone event handlers
 myDropzone.on("addedfile", function(file) {
     document.getElementById('overall-upload-status').classList.remove('d-none');
-    // Hide the message after the first file is added
     const message = document.querySelector('.dz-message');
     if (message) {
         message.style.display = 'none';
@@ -248,16 +264,6 @@ myDropzone.on("success", function(file, response) {
             window.location.reload();
         }, 1000);
     }
-});
-
-myDropzone.on("error", function(file, errorMessage) {
-    const statusText = document.querySelector('#overall-upload-status .status-text');
-    statusText.textContent = 'Upload failed. Please try again.';
-    const uploadButton = document.getElementById('uploadButton');
-    const loadingSpinner = document.getElementById('loadingSpinner');
-
-    uploadButton.disabled = false;
-    loadingSpinner.classList.add('d-none');
 });
 
 // Category form handling
