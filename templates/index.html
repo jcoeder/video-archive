@@ -94,14 +94,6 @@
 
                         <hr class="my-4">
 
-                        <h6>YouTube Video</h6>
-                        <div class="mb-3">
-                            <input type="url" class="form-control" id="youtubeUrl" name="youtube_url"
-                                   placeholder="https://youtube.com/...">
-                        </div>
-
-                        <hr class="my-4">
-
                         <h6>Metadata for All Uploads</h6>
                         <div class="mb-3">
                             <label class="form-label">Categories</label>
@@ -211,7 +203,6 @@ const myDropzone = new Dropzone("#uploadForm", {
 });
 
 function processUploads() {
-    const youtubeUrl = document.getElementById('youtubeUrl').value;
     const uploadButton = document.getElementById('uploadButton');
     const loadingSpinner = document.getElementById('loadingSpinner');
     const uploadStatus = document.querySelector('#overall-upload-status .status-text');
@@ -220,34 +211,6 @@ function processUploads() {
     uploadButton.disabled = true;
     loadingSpinner.classList.remove('d-none');
     progressContainer.classList.remove('d-none');
-
-    if (youtubeUrl) {
-        uploadStatus.textContent = 'Processing YouTube video...';
-        const formData = new FormData();
-        formData.append('youtube_url', youtubeUrl);
-
-        const notes = document.getElementById('notes').value;
-        const categories = Array.from(document.querySelectorAll('input[name="categories"]:checked'))
-            .map(cb => cb.value);
-
-        formData.append('notes', notes);
-        categories.forEach(cat => formData.append('categories', cat));
-
-        fetch("{{ url_for('upload_video') }}", {
-            method: 'POST',
-            body: formData
-        }).then(response => {
-            if (response.ok) {
-                window.location.href = response.url;
-            } else {
-                throw new Error('YouTube processing failed');
-            }
-        }).catch(error => {
-            uploadButton.disabled = false;
-            loadingSpinner.classList.add('d-none');
-            uploadStatus.textContent = 'YouTube processing failed.';
-        });
-    }
 
     if (myDropzone.files.length > 0) {
         uploadStatus.textContent = 'Starting upload...';
