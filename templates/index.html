@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head><title>Video Archive</title></head>
+<body>
+    <h1>Video Archive</h1>
+    <p>
+        <a href="{{ url_for('upload') }}">Upload New Video</a> | 
+        <a href="{{ url_for('change_password') }}">Change Password</a> | 
+        <a href="{{ url_for('logout') }}">Logout</a>
+    </p>
+    <table border="1">
+        <tr>
+            <th>Thumbnail</th>
+            <th>Title</th>
+            <th>Upload Date</th>
+            <th>Tags</th>
+        </tr>
+        {% for video in videos %}
+        <tr>
+            <td><a href="{{ url_for('view_video', id=video.id) }}"><img src="{{ url_for('static', filename='thumbnails/' + video.thumbnail) }}" width="100"></a></td>
+            <td>{{ video.title }}</td>
+            <td>{{ video.upload_date.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ video.tags | map(attribute='name') | join(', ') }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

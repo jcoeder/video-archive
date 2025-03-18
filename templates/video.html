@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head><title>{{ video.title }}</title></head>
+<body>
+    <h1>{{ video.title }}</h1>
+    <video controls>
+        <source src="{{ url_for('static', filename='uploads/' + video.filename) }}" type="video/mp4">
+    </video>
+    <p>Uploaded: {{ video.upload_date.strftime('%Y-%m-%d %H:%M') }}</p>
+    <p>Tags: {{ video.tags | map(attribute='name') | join(', ') }}</p>
+    <p>Notes: {{ video.notes }}</p>
+    <p><a href="{{ url_for('index') }}">Back to Home</a></p>
+</body>
+</html>
