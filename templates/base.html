@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}{% endblock %}</title>
+    <style>
+        /* CSS Variables for Light and Dark Modes */
+        :root {
+            --background-color: #ffffff;
+            --text-color: #000000;
+            --card-background: #f9f9f9;
+            --card-border: #ddd;
+            --nav-background: #f8f8f8;
+            --nav-hover: #ddd;
+            --button-bg: #007bff;
+            --button-bg-danger: #dc3545;
+            --button-text: #ffffff;
+            --shadow: rgba(0,0,0,0.1);
+            --tab-background: #e0e0e0;
+            --tab-active: #ffffff;
+            --tab-border: #ccc;
+            --outline: #e0e0e0;
+        }
+
+        [data-theme="dark"] {
+            --background-color: #1a1a1a;
+            --text-color: #ffffff;
+            --card-background: #2a2a2a;
+            --card-border: #444;
+            --nav-background: #333;
+            --nav-hover: #555;
+            --button-bg: #0056b3;
+            --button-bg-danger: #a52834;
+            --button-text: #ffffff;
+            --shadow: rgba(255,255,255,0.1);
+            --tab-background: #444;
+            --tab-active: #2a2a2a;
+            --tab-border: #666;
+            --outline: #444;
+        }
+
+        /* Apply theme variables */
+        body {
+            background-color: var(--background-color);
+            color: var(--text-color);
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+
+        /* Navigation styling */
+        nav {
+            background-color: var(--background-color);
+            border-bottom: 1px solid var(--outline);
+            padding: 10px 0;
+        }
+        nav ul {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
+        nav ul li {
+            display: inline-block;
+            margin-right: 10px;
+        }
+        nav ul li a {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: var(--tab-background);
+            border: 1px solid var(--tab-border);
+            border-bottom: none;
+            border-radius: 5px 5px 0 0;
+            text-decoration: none;
+            color: var(--text-color);
+            transition: background-color 0.3s;
+        }
+        nav ul li a:hover {
+            background-color: var(--nav-hover);
+        }
+        nav ul li a.active {
+            background-color: var(--tab-active);
+            border-bottom: 1px solid var(--tab-active);
+            position: relative;
+            top: 1px;
+        }
+        .dropdown {
+            display: inline-block;
+        }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: var(--nav-background);
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px var(--shadow);
+            z-index: 1;
+        }
+        .dropdown-content a {
+            color: var(--text-color);
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+        }
+        .dropdown-content a:hover {
+            background-color: var(--nav-hover);
+        }
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+
+        /* Video grid styling */
+        .video-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 20px;
+            justify-content: center;
+        }
+        .video-card {
+            background-color: var(--card-background);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            width: 250px;
+            padding: 10px;
+            text-align: center;
+            box-shadow: 0 2px 5px var(--shadow);
+        }
+        .video-card img {
+            width: 250px;
+            height: 250px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        .video-card h3 {
+            font-size: 1.1em;
+            margin: 10px 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .video-card p {
+            font-size: 0.9em;
+            color: var(--text-color);
+            margin: 5px 0;
+        }
+        .video-card .tags {
+            font-size: 0.85em;
+            color: var(--text-color);
+            opacity: 0.7;
+            margin: 5px 0;
+        }
+        .video-card .transcription-context {
+            font-size: 0.85em;
+            color: var(--text-color);
+            margin: 5px 0;
+            font-style: italic;
+        }
+        .video-card .actions {
+            margin-top: 10px;
+        }
+        .video-card .actions a, .video-card .actions input[type="submit"] {
+            background-color: var(--button-bg);
+            color: var(--button-text);
+            border: none;
+            padding: 5px 10px;
+            margin: 0 5px;
+            border-radius: 4px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .video-card .actions input[type="submit"] {
+            background-color: var(--button-bg-danger);
+        }
+        .video-card .actions a:hover, .video-card .actions input[type="submit"]:hover {
+            opacity: 0.9;
+        }
+
+        /* Form styling */
+        form {
+            margin: 10px 0;
+            text-align: center;
+        }
+        form label {
+            margin-right: 5px;
+        }
+        form input[type="text"], form input[type="password"], form textarea, form select {
+            padding: 5px;
+            border: 1px solid var(--card-border);
+            border-radius: 4px;
+            background-color: var(--card-background);
+            color: var(--text-color);
+        }
+        form input[type="submit"] {
+            background-color: var(--button-bg);
+            color: var(--button-text);
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        form input[type="submit"]:hover {
+            opacity: 0.9;
+        }
+
+        /* Toggle Switch */
+        .toggle-container {
+            display: inline-flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+        .toggle-container label {
+            margin-right: 10px;
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: var(--button-bg);
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        /* Heading */
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body data-theme="{% if get_current_user() %}{{ get_current_user().theme }}{% else %}light{% endif %}">
+    <!-- Page Heading -->
+    <h1>{% block heading %}{% endblock %}</h1>
+
+    <!-- Navigation Tabs -->
+    <nav>
+        <ul>
+            {% if 'user_id' in session %}
+                <li><a href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}class="active"{% endif %}>Home</a></li>
+                <li><a href="{{ url_for('upload') }}" {% if request.endpoint == 'upload' %}class="active"{% endif %}>Upload Video</a></li>
+                <li class="dropdown">
+                    <a href="javascript:void(0)" class="dropbtn">{{ get_current_user().username }}</a>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('change_password') }}">Change Password</a>
+                        <a href="{{ url_for('preferences') }}">Preferences</a>
+                        {% if get_current_user().is_admin %}
+                            <a href="{{ url_for('manage_users') }}">Manage Users</a>
+                        {% endif %}
+                        <a href="{{ url_for('logout') }}">Logout</a>
+                    </div>
+                </li>
+            {% else %}
+                <li><a href="{{ url_for('login') }}" {% if request.endpoint == 'login' %}class="active"{% endif %}>Login</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <p style="text-align: center;">{{ message }}</p>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- Page Content -->
+    {% block content %}{% endblock %}
+</body>
+</html>

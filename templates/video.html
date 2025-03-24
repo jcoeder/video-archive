@@ -1,14 +1,193 @@
-<!DOCTYPE html>
-<html>
-<head><title>{{ video.title }}</title></head>
-<body>
-    <h1>{{ video.title }}</h1>
-    <video controls>
-        <source src="{{ url_for('static', filename='uploads/' + video.filename) }}" type="video/mp4">
-    </video>
-    <p>Uploaded: {{ video.upload_date.strftime('%Y-%m-%d %H:%M') }}</p>
-    <p>Tags: {{ video.tags | map(attribute='name') | join(', ') }}</p>
-    <p>Notes: {{ video.notes }}</p>
-    <p><a href="{{ url_for('index') }}">Back to Home</a></p>
-</body>
-</html>
+{% extends "base.html" %}
+{% block title %}{{ video.title }}{% endblock %}
+{% block heading %}{{ video.title }}{% endblock %}
+{% block content %}
+<div class="video-page">
+    <!-- Video Player Section -->
+    <div class="video-card">
+        <video controls>
+            <source src="{{ url_for('static', filename='uploads/' + video.filename) }}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+    </div>
+
+    <!-- Metadata Section -->
+    <div class="video-card metadata">
+        <h2>Details</h2>
+        <p><strong>Uploaded:</strong> {{ video.upload_date.strftime('%Y-%m-%d %H:%M') }}</p>
+        <p><strong>Tags:</strong> {{ tags or 'None' }}</p>
+        <p><strong>Notes:</strong> {{ video.notes or 'No notes available' }}</p>
+        <p><strong>Transcription Status:</strong>
+            {% if video.transcription_status == 'running' %}
+                Running...
+            {% elif video.transcription_status == 'completed' %}
+                Completed
+                <a href="{{ url_for('view_transcription', id=video.id) }}" class="button">View Transcription</a>
+            {% elif video.transcription_status == 'failed' %}
+                Failed
+            {% else %}
+                Not Started
+            {% endif %}
+        </p>
+        <form method="POST" class="transcription-action">
+            <input type="submit" name="start_transcription" value="{% if video.transcription_status == 'completed' %}Restart Transcription{% else %}Start Transcription{% endif %}" class="button">
+        </form>
+    </div>
+
+    <!-- Manual Transcription Section (if applicable) -->
+    {% if video.transcription_status == 'failed' or not video.transcription %}
+    <div class="video-card transcription">
+        <h2>Manual Transcription</h2>
+        <form method="POST">
+            <textarea name="manual_transcription" placeholder="Enter transcription manually">{{ video.transcription or '' }}</textarea>
+            <input type="submit" name="save_manual_transcription" value="Save Manual Transcription" class="button">
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Edit Video Details Section -->
+    <div class="video-card edit-details">
+        <h2>Edit Video Details</h2>
+        <form method="POST">
+            <label for="tags">Tags (comma-separated):</label>
+            <input type="text" id="tags" name="tags" value="{{ tags }}">
+            <label for="notes">Notes:</label>
+            <textarea id="notes" name="notes">{{ video.notes or '' }}</textarea>
+            <input type="submit" value="Save Changes" class="button">
+        </form>
+    </div>
+
+    <!-- Actions Section -->
+    <div class="actions">
+        <form method="POST" action="{{ url_for('delete_video', id=video.id) }}" style="display:inline;">
+            <input type="submit" value="Delete Video" class="button danger" onclick="return confirm('Are you sure you want to delete {{ video.title }}?');">
+        </form>
+        <a href="{{ url_for('index') }}" class="button">Back to Home</a>
+    </div>
+</div>
+
+<style>
+    .video-page {
+        max-width: 900px;
+        margin: 20px auto;
+        padding: 0 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .video-card {
+        background-color: var(--card-background);
+        border: 1px solid var(--card-border);
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 5px var(--shadow);
+        width: 100%;
+    }
+
+    .video-card video {
+        width: 100%;
+        max-width: 640px;
+        height: auto;
+        border-radius: 4px;
+        display: block;
+        margin: 0 auto;
+    }
+
+    .video-card h2 {
+        font-size: 1.5em;
+        margin-bottom: 15px;
+        text-align: center;
+    }
+
+    .video-card p {
+        margin: 10px 0;
+        font-size: 1em;
+    }
+
+    .video-card p strong {
+        color: var(--text-color);
+        opacity: 0.9;
+    }
+
+    .transcription-action {
+        margin-top: 10px;
+        text-align: center;
+    }
+
+    .video-card form {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .video-card label {
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .video-card input[type="text"],
+    .video-card textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid var(--card-border);
+        border-radius: 4px;
+        background-color: var(--card-background);
+        color: var(--text-color);
+        resize: vertical;
+    }
+
+    .video-card textarea {
+        min-height: 100px;
+    }
+
+    .button {
+        background-color: var(--button-bg);
+        color: var(--button-text);
+        border: none;
+        padding: 8px 15px;
+        border-radius: 4px;
+        text-decoration: none;
+        cursor: pointer;
+        text-align: center;
+        display: inline-block;
+        transition: opacity 0.3s;
+    }
+
+    .button:hover {
+        opacity: 0.9;
+    }
+
+    .button.danger {
+        background-color: var(--button-bg-danger);
+    }
+
+    .actions {
+        text-align: center;
+        margin-top: 20px;
+    }
+
+    .actions .button {
+        margin: 0 10px;
+    }
+
+    @media (max-width: 600px) {
+        .video-page {
+            padding: 0 10px;
+        }
+
+        .video-card video {
+            max-width: 100%;
+        }
+
+        .button {
+            width: 100%;
+            margin: 5px 0;
+        }
+
+        .actions .button {
+            display: block;
+        }
+    }
+</style>
+{% endblock %}

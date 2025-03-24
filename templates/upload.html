@@ -1,22 +1,278 @@
-<!DOCTYPE html>
-<html>
-<head><title>Upload Video</title></head>
-<body>
-    <h1>Upload Video</h1>
-    {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            {% for message in messages %}
-                <p>{{ message }}</p>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-    <form method="POST" enctype="multipart/form-data">
-        <p>Title: <input type="text" name="title" required></p>
-        <p>Video: <input type="file" name="video" accept="video/*" required></p>
-        <p>Tags (comma-separated): <input type="text" name="tags"></p>
-        <p>Notes: <textarea name="notes"></textarea></p>
-        <p><input type="submit" value="Upload"></p>
-    </form>
-    <p><a href="{{ url_for('index') }}">Back to Home</a></p>
-</body>
-</html>
+{% extends "base.html" %}
+{% block title %}Upload Videos{% endblock %}
+{% block heading %}Upload Videos{% endblock %}
+{% block content %}
+<div class="upload-page">
+    <div class="upload-card">
+        <h2>Upload Your Videos</h2>
+        <form method="POST" enctype="multipart/form-data" id="uploadForm">
+            <div id="dropZone">
+                <p>Drag and drop videos here or click to select</p>
+                <input type="file" name="videos" id="videoInput" accept="video/*" multiple style="display: none;">
+                <div id="fileList"></div>
+            </div>
+            <label for="tags">Tags (comma-separated):</label>
+            <input type="text" id="tags" name="tags" placeholder="e.g., funny, tutorial">
+            <label for="notes">Notes:</label>
+            <textarea id="notes" name="notes" placeholder="Add some notes about your videos"></textarea>
+            <button type="submit" id="uploadButton">Upload</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    const dropZone = document.getElementById('dropZone');
+    const videoInput = document.getElementById('videoInput');
+    const fileList = document.getElementById('fileList');
+    const uploadForm = document.getElementById('uploadForm');
+
+    // Drag and drop handlers
+    dropZone.addEventListener('click', () => videoInput.click());
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+    });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        videoInput.files = e.dataTransfer.files;
+        updateFileList();
+    });
+    videoInput.addEventListener('change', updateFileList);
+
+    // Update file list with progress bars
+    function updateFileList() {
+        fileList.innerHTML = '';
+        const files = videoInput.files;
+        for (let i = 0; i < files.length; i++) {
+            const fileItem = document.createElement('div');
+            fileItem.className = 'file-item';
+            fileItem.innerHTML = `
+                <span class="file-name">${files[i].name}</span>
+                <div class="progress-container">
+                    <div class="progress-bar" data-file="${files[i].name}" style="width: 0%;">0%</div>
+                </div>
+            `;
+            fileList.appendChild(fileItem);
+        }
+    }
+
+    // Handle form submission with XHR for progress tracking
+    uploadForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const formData = new FormData(uploadForm);
+        const files = videoInput.files;
+        const uploadButton = document.getElementById('uploadButton');
+        uploadButton.disabled = true;
+        uploadButton.textContent = 'Uploading...';
+
+        const xhr = new XMLHttpRequest();
+
+        // Track upload progress
+        xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) {
+                const totalSize = Array.from(files).reduce((sum, file) => sum + file.size, 0);
+                const percentComplete = (event.loaded / event.total) * 100;
+                for (let i = 0; i < files.length; i++) {
+                    const fileName = files[i].name;
+                    const progressBar = document.querySelector(`.progress-bar[data-file="${fileName}"]`);
+                    // Approximate per-file progress (assuming equal contribution to total)
+                    const filePercent = Math.min(percentComplete, 100);
+                    progressBar.style.width = `${filePercent}%`;
+                    progressBar.textContent = `${Math.round(filePercent)}%`;
+                }
+            }
+        });
+
+        // Handle completion
+        xhr.addEventListener('load', () => {
+            if (xhr.status === 200) {
+                const result = JSON.parse(xhr.responseText);
+                for (let i = 0; i < files.length; i++) {
+                    const fileName = files[i].name;
+                    const progressBar = document.querySelector(`.progress-bar[data-file="${fileName}"]`);
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = result[fileName] || 'Uploaded';
+                    progressBar.classList.add('success');
+                }
+                setTimeout(() => window.location.href = '/', 1000); // Redirect after success
+            } else {
+                for (let i = 0; i < files.length; i++) {
+                    const fileName = files[i].name;
+                    const progressBar = document.querySelector(`.progress-bar[data-file="${fileName}"]`);
+                    progressBar.textContent = 'Failed';
+                    progressBar.classList.add('error');
+                }
+            }
+            uploadButton.disabled = false;
+            uploadButton.textContent = 'Upload';
+        });
+
+        // Handle errors
+        xhr.addEventListener('error', () => {
+            for (let i = 0; i < files.length; i++) {
+                const fileName = files[i].name;
+                const progressBar = document.querySelector(`.progress-bar[data-file="${fileName}"]`);
+                progressBar.textContent = 'Failed';
+                progressBar.classList.add('error');
+            }
+            uploadButton.disabled = false;
+            uploadButton.textContent = 'Upload';
+        });
+
+        // Send the request
+        xhr.open('POST', '/upload', true);
+        xhr.send(formData);
+    });
+</script>
+
+<style>
+    .upload-page {
+        max-width: 900px;
+        margin: 20px auto;
+        padding: 0 20px;
+    }
+
+    .upload-card {
+        background-color: var(--card-background);
+        border: 1px solid var(--card-border);
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 5px var(--shadow);
+    }
+
+    .upload-card h2 {
+        text-align: center;
+        margin-bottom: 20px;
+        font-size: 1.5em;
+    }
+
+    #dropZone {
+        border: 2px dashed var(--card-border);
+        padding: 20px;
+        text-align: center;
+        border-radius: 8px;
+        background-color: var(--tab-background);
+        transition: border-color 0.3s, background-color 0.3s;
+    }
+
+    #dropZone.dragover {
+        border-color: var(--button-bg);
+        background-color: var(--nav-hover);
+    }
+
+    #dropZone p {
+        margin: 0 0 10px;
+        color: var(--text-color);
+        opacity: 0.8;
+    }
+
+    #fileList {
+        margin-top: 15px;
+    }
+
+    .file-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px;
+        border-bottom: 1px solid var(--outline);
+    }
+
+    .file-name {
+        flex-grow: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .progress-container {
+        width: 150px;
+        height: 20px;
+        background-color: var(--tab-background);
+        border-radius: 10px;
+        overflow: hidden;
+        margin-left: 10px;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background-color: var(--button-bg);
+        color: var(--button-text);
+        text-align: center;
+        line-height: 20px;
+        transition: width 0.3s ease;
+    }
+
+    .progress-bar.success {
+        background-color: #28a745;
+    }
+
+    .progress-bar.error {
+        background-color: var(--button-bg-danger);
+    }
+
+    #uploadForm label {
+        display: block;
+        font-weight: bold;
+        margin: 15px 0 5px;
+    }
+
+    #uploadForm input[type="text"],
+    #uploadForm textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid var(--card-border);
+        border-radius: 4px;
+        background-color: var(--card-background);
+        color: var(--text-color);
+    }
+
+    #uploadForm textarea {
+        min-height: 100px;
+        resize: vertical;
+    }
+
+    #uploadButton {
+        display: block;
+        width: 100%;
+        padding: 10px;
+        margin-top: 20px;
+        background-color: var(--button-bg);
+        color: var(--button-text);
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: opacity 0.3s;
+    }
+
+    #uploadButton:hover:not(:disabled) {
+        opacity: 0.9;
+    }
+
+    #uploadButton:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    @media (max-width: 600px) {
+        .upload-page {
+            padding: 0 10px;
+        }
+
+        .file-item {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .progress-container {
+            width: 100%;
+            margin-left: 0;
+            margin-top: 5px;
+        }
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Preferences{% endblock %}
+{% block heading %}Preferences{% endblock %}
+{% block content %}
+    <h2>Theme</h2>
+    <form method="POST">
+        <div class="toggle-container">
+            <label for="theme-toggle">Theme:</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="theme-toggle" name="theme" value="dark" {% if get_current_user().theme == 'dark' %}checked{% endif %} onchange="this.form.submit()">
+                <span class="slider"></span>
+            </label>
+            <span>{{ 'Dark' if get_current_user().theme == 'dark' else 'Light' }} Mode</span>
+        </div>
+        <input type="hidden" name="theme" value="light">
+    </form>
+{% endblock %}

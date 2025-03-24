@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Manage Users{% endblock %}
+{% block heading %}Manage Users{% endblock %}
+{% block content %}
+    <h2>Add User</h2>
+    <form method="POST">
+        <p>Username: <input type="text" name="username" required></p>
+        <p>Password: <input type="password" name="password" required></p>
+        <p><input type="submit" name="add_user" value="Add User"></p>
+    </form>
+    
+    <h2>Current Users</h2>
+    <table border="1">
+        <tr>
+            <th>Username</th>
+            <th>Admin</th>
+            <th>Actions</th>
+        </tr>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.username }}</td>
+            <td>{{ 'Yes' if user.is_admin else 'No' }}</td>
+            <td>
+                {% if user.username != 'admin' %}
+                <form method="POST" style="display:inline;">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <input type="submit" name="toggle_admin" value="{{ 'Remove Admin' if user.is_admin else 'Make Admin' }}">
+                </form>
+                {% endif %}
+                {% if not user.is_admin %}
+                <form method="POST" style="display:inline;">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <input type="submit" name="delete_user" value="Delete" onclick="return confirm('Are you sure you want to delete {{ user.username }}?');">
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+{% endblock %}

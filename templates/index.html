@@ -1,28 +1,210 @@
-<!DOCTYPE html>
-<html>
-<head><title>Video Archive</title></head>
-<body>
-    <h1>Video Archive</h1>
-    <p>
-        <a href="{{ url_for('upload') }}">Upload New Video</a> | 
-        <a href="{{ url_for('change_password') }}">Change Password</a> | 
-        <a href="{{ url_for('logout') }}">Logout</a>
-    </p>
-    <table border="1">
-        <tr>
-            <th>Thumbnail</th>
-            <th>Title</th>
-            <th>Upload Date</th>
-            <th>Tags</th>
-        </tr>
+{% extends "base.html" %}
+{% block title %}Video Archive{% endblock %}
+{% block heading %}Video Archive{% endblock %}
+{% block content %}
+<div class="index-page">
+    <!-- Filters -->
+    <div class="filters">
+        <form id="search-form">
+            <label for="search">Search:</label>
+            <input type="text" id="search" name="search" value="{{ search_query or '' }}" placeholder="Search videos..." autocomplete="off">
+        </form>
+        <div class="tag-list">
+            <strong>Tags:</strong>
+            <a href="{{ url_for('index') }}" {% if not selected_tag %}class="active"{% endif %}>All</a>
+            {% for tag in all_tags %}
+                <a href="{{ url_for('index', tag=tag.name) }}" {% if selected_tag == tag.name %}class="active"{% endif %}>{{ tag.name }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Video Grid -->
+    <div class="video-grid" id="video-grid">
         {% for video in videos %}
-        <tr>
-            <td><a href="{{ url_for('view_video', id=video.id) }}"><img src="{{ url_for('static', filename='thumbnails/' + video.thumbnail) }}" width="100"></a></td>
-            <td>{{ video.title }}</td>
-            <td>{{ video.upload_date.strftime('%Y-%m-%d %H:%M') }}</td>
-            <td>{{ video.tags | map(attribute='name') | join(', ') }}</td>
-        </tr>
+            <div class="video-card" data-id="{{ video.id }}">
+                <a href="{{ url_for('view_video', id=video.id) }}">
+                    <img src="{{ url_for('static', filename='thumbnails/' + video.thumbnail) }}" alt="{{ video.title }}">
+                </a>
+                <h3>{{ video.title }}</h3>
+                <p>{{ video.upload_date.strftime('%Y-%m-%d %H:%M') }}</p>
+                <p class="tags">{{ video.tags|map(attribute='name')|join(', ') or 'No tags' }}</p>
+                <div class="actions">
+                    <a href="{{ url_for('view_video', id=video.id) }}">View</a>
+                    {% if get_current_user().is_admin or video.user_id == get_current_user().id %}
+                        <form method="POST" action="{{ url_for('delete_video', id=video.id) }}" style="display:inline;">
+                            <input type="submit" value="Delete" onclick="return confirm('Are you sure you want to delete {{ video.title }}?');">
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
         {% endfor %}
-    </table>
-</body>
-</html>
+        {% if not videos %}
+            <p>No videos found.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    // Parse the JSON data passed from Flask
+    const allVideos = {{ videos_json|safe }};
+
+    // Function to extract context around a search term (mimics server-side extract_context)
+    function extractContext(text, searchTerm, wordsBefore = 10, wordsAfter = 10) {
+        if (!text || !searchTerm) return '';
+        const textLower = text.toLowerCase();
+        const searchTermLower = searchTerm.toLowerCase();
+        const index = textLower.indexOf(searchTermLower);
+        if (index === -1) return '';
+
+        const words = text.split(/\s+/);
+        let startWordIdx = 0;
+        let charCount = 0;
+        for (let i = 0; i < words.length; i++) {
+            charCount += words[i].length + 1;
+            if (charCount > index) {
+                startWordIdx = i;
+                break;
+            }
+        }
+
+        const startIdx = Math.max(0, startWordIdx - wordsBefore);
+        const endIdx = Math.min(words.length, startWordIdx + searchTerm.split(/\s+/).length + wordsAfter);
+        return words.slice(startIdx, endIdx).join(' ');
+    }
+
+    // Function to filter videos and update the grid
+    function filterVideos() {
+        const searchTerm = document.getElementById('search').value.toLowerCase();
+        const videoGrid = document.getElementById('video-grid');
+        videoGrid.innerHTML = ''; // Clear current grid
+
+        const filteredVideos = allVideos.filter(video => {
+            const matchesSearch = (
+                video.title.toLowerCase().includes(searchTerm) ||
+                video.notes.toLowerCase().includes(searchTerm) ||
+                video.transcription.toLowerCase().includes(searchTerm) ||
+                video.tags.some(tag => tag.toLowerCase().includes(searchTerm))
+            );
+            const selectedTag = "{{ selected_tag or '' }}";
+            const matchesTag = !selectedTag || video.tags.includes(selectedTag);
+            return matchesSearch && matchesTag;
+        });
+
+        if (filteredVideos.length === 0) {
+            videoGrid.innerHTML = '<p>No videos found.</p>';
+        } else {
+            filteredVideos.forEach(video => {
+                const card = document.createElement('div');
+                card.className = 'video-card';
+                card.dataset.id = video.id;
+                let transcriptionContext = '';
+                if (searchTerm && video.transcription.toLowerCase().includes(searchTerm)) {
+                    transcriptionContext = extractContext(video.transcription, searchTerm);
+                }
+
+                card.innerHTML = `
+                    <a href="/video/${video.id}">
+                        <img src="/static/thumbnails/${video.thumbnail}" alt="${video.title}">
+                    </a>
+                    <h3>${video.title}</h3>
+                    <p>${video.upload_date}</p>
+                    <p class="tags">${video.tags.join(', ') || 'No tags'}</p>
+                    ${transcriptionContext ? `<p class="transcription-context">"${transcriptionContext}"</p>` : ''}
+                    <div class="actions">
+                        <a href="/video/${video.id}">View</a>
+                        ${video.user_id === {{ get_current_user().id }} || {{ get_current_user().is_admin|lower }} ?
+                            `<form method="POST" action="/delete/${video.id}" style="display:inline;">
+                                <input type="submit" value="Delete" onclick="return confirm('Are you sure you want to delete ${video.title}?');">
+                            </form>` : ''
+                        }
+                    </div>
+                `;
+                videoGrid.appendChild(card);
+            });
+        }
+    }
+
+    // Add event listener to search input
+    document.getElementById('search').addEventListener('input', filterVideos);
+
+    // Initial filter if there's a search query or tag
+    window.onload = filterVideos;
+</script>
+
+<style>
+    .index-page {
+        max-width: 1200px;
+        margin: 20px auto;
+        padding: 0 20px;
+    }
+
+    .filters {
+        margin-bottom: 20px;
+        text-align: center;
+    }
+
+    #search-form {
+        margin-bottom: 15px;
+    }
+
+    #search-form label {
+        font-weight: bold;
+        margin-right: 10px;
+    }
+
+    #search-form input[type="text"] {
+        width: 300px;
+        max-width: 100%;
+        padding: 8px;
+        border: 1px solid var(--card-border);
+        border-radius: 4px;
+        background-color: var(--card-background);
+        color: var(--text-color);
+    }
+
+    .tag-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+    }
+
+    .tag-list a {
+        padding: 5px 10px;
+        background-color: var(--tab-background);
+        border: 1px solid var(--tab-border);
+        border-radius: 4px;
+        text-decoration: none;
+        color: var(--text-color);
+        transition: background-color 0.3s;
+    }
+
+    .tag-list a:hover {
+        background-color: var(--nav-hover);
+    }
+
+    .tag-list a.active {
+        background-color: var(--tab-active);
+        border-bottom: 1px solid var(--tab-active);
+    }
+
+    .tag-list strong {
+        margin-right: 10px;
+    }
+
+    @media (max-width: 600px) {
+        .index-page {
+            padding: 0 10px;
+        }
+
+        #search-form input[type="text"] {
+            width: 100%;
+        }
+
+        .tag-list {
+            flex-direction: column;
+            align-items: center;
+        }
+    }
+</style>
+{% endblock %}

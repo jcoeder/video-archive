@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ video.title }} - Transcription{% endblock %}
+{% block heading %}{{ video.title }} - Transcription{% endblock %}
+{% block content %}
+<div class="transcription-page">
+    <!-- Transcription Content -->
+    <div class="transcription-card">
+        <h2>Transcription</h2>
+        <form method="GET" action="{{ url_for('view_transcription', id=video.id) }}" class="interval-form">
+            <label for="interval">Section Interval (minutes):</label>
+            <select name="interval" id="interval" onchange="this.form.submit()">
+                {% for i in range(1, 6) %}
+                    <option value="{{ i }}" {% if i == interval %}selected{% endif %}>{{ i }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <div class="transcription-content">
+            {% if paragraphs %}
+                {% for paragraph in paragraphs %}
+                    {% set start_minute = loop.index0 * interval %}
+                    <div class="transcription-section">
+                        <span class="minute-marker">[{{ start_minute }}:00 - {{ start_minute + interval }}:00]</span>
+                        <p>{{ paragraph }}</p>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No transcription available.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+        <a href="{{ url_for('view_video', id=video.id) }}" class="button">Back to Video Details</a>
+    </div>
+</div>
+
+<style>
+    .transcription-page {
+        max-width: 900px;
+        margin: 20px auto;
+        padding: 0 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .transcription-card {
+        background-color: var(--card-background);
+        border: 1px solid var(--card-border);
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 5px var(--shadow);
+        width: 100%;
+    }
+
+    .transcription-card h2 {
+        font-size: 1.5em;
+        margin-bottom: 15px;
+        text-align: center;
+    }
+
+    .interval-form {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+
+    .interval-form label {
+        font-weight: bold;
+    }
+
+    .interval-form select {
+        padding: 8px;
+        border: 1px solid var(--card-border);
+        border-radius: 4px;
+        background-color: var(--card-background);
+        color: var(--text-color);
+    }
+
+    .transcription-content {
+        margin-top: 20px;
+    }
+
+    .transcription-section {
+        margin-bottom: 20px;
+    }
+
+    .minute-marker {
+        display: block;
+        font-weight: bold;
+        color: var(--text-color);
+        opacity: 0.8;
+        margin-bottom: 5px;
+    }
+
+    .transcription-section p {
+        margin: 0;
+        padding: 10px;
+        background-color: var(--tab-background);
+        border-radius: 4px;
+        line-height: 1.5;
+    }
+
+    .button {
+        background-color: var(--button-bg);
+        color: var(--button-text);
+        border: none;
+        padding: 8px 15px;
+        border-radius: 4px;
+        text-decoration: none;
+        cursor: pointer;
+        text-align: center;
+        display: inline-block;
+        transition: opacity 0.3s;
+    }
+
+    .button:hover {
+        opacity: 0.9;
+    }
+
+    .actions {
+        text-align: center;
+        margin-top: 20px;
+    }
+
+    .actions .button {
+        margin: 0 10px;
+    }
+
+    @media (max-width: 600px) {
+        .transcription-page {
+            padding: 0 10px;
+        }
+
+        .interval-form {
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .button {
+            width: 100%;
+            margin: 5px 0;
+        }
+
+        .actions .button {
+            display: block;
+        }
+    }
+</style>
+{% endblock %}
