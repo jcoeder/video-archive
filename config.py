@@ -5,4 +5,4 @@ SQLALCHEMY_TRACK_MODIFICATIONS = False
 UPLOAD_FOLDER = 'static/uploads'
 THUMBNAIL_FOLDER = 'static/thumbnails'
 LOG_FILE = '/var/log/videoarchive'  # Log file path
-LOG_LEVEL = 'INFO'  # Default log level (INFO or DEBUG)
+LOG_LEVEL = 'DEBUG'  # Default log level (INFO or DEBUG)

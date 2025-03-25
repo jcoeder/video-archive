@@ -1,0 +1,16 @@
+[Unit]
+Description=Video Archive Flask Application
+After=network.target
+
+[Service]
+User=videoarchive
+Group=videoarchive
+WorkingDirectory=/opt/videoarchive
+Environment="PATH=/opt/videoarchive/venv/bin:/usr/bin:/bin"
+ExecStart=/opt/videoarchive/venv/bin/gunicorn --workers 4 --timeout 600 --bind 0.0.0.0:5000 app:app
+Restart=always
+StandardOutput=append:/var/log/videoarchive.log
+StandardError=append:/var/log/videoarchive.log
+
+[Install]
+WantedBy=multi-user.target

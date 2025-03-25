@@ -5,3 +5,4 @@ psycopg2-binary
 werkzeug
 pydub
 openai-whisper
+gunicorn
