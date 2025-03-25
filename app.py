@@ -276,8 +276,6 @@ def index():
         flash('Session expired. Please log in again.')
         return redirect(url_for('login'))
 
-    all_tags = Tag.query.filter(Tag.videos.any()).order_by(Tag.name).all()
-    selected_tag = request.args.get('tag', None)
     search_query = request.args.get('search', None)
 
     # Filter videos based on user role
@@ -287,7 +285,6 @@ def index():
     
     videos = query.all()
 
-    # Include uploader username in videos_json for client-side filtering
     videos_json = [
         {
             'id': video.id,
@@ -303,10 +300,8 @@ def index():
     ]
 
     logger.info(f"Rendering index page for user {current_user.username}")
-    # Pass videos with their User objects for template rendering
     return render_template('index.html', videos=[(video, db.session.get(User, video.user_id)) for video in videos], 
-                         all_tags=all_tags, selected_tag=selected_tag, search_query=search_query, 
-                         videos_json=json.dumps(videos_json))
+                         search_query=search_query, videos_json=json.dumps(videos_json))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -563,7 +558,7 @@ def delete_video(id):
 
     db.session.delete(video)
     db.session.commit()
-    cleanup_unused_tags()
+    cleanup_unused_tags()  # Clean up tags after deletion
     flash('Video deleted successfully')
     logger.info(f"Video {id} deleted by user {current_user.username}")
     return redirect(url_for('index'))

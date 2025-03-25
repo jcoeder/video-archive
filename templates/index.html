@@ -9,13 +9,6 @@
             <label for="search">Search:</label>
             <input type="text" id="search" name="search" value="{{ search_query or '' }}" placeholder="Search videos..." autocomplete="off">
         </form>
-        <div class="tag-list">
-            <strong>Tags:</strong>
-            <a href="{{ url_for('index') }}" {% if not selected_tag %}class="active"{% endif %}>All</a>
-            {% for tag in all_tags %}
-                <a href="{{ url_for('index', tag=tag.name) }}" {% if selected_tag == tag.name %}class="active"{% endif %}>{{ tag.name }}</a>
-            {% endfor %}
-        </div>
     </div>
 
     <!-- Video Grid -->
@@ -85,9 +78,7 @@
                 video.transcription.toLowerCase().includes(searchTerm) ||
                 video.tags.some(tag => tag.toLowerCase().includes(searchTerm))
             );
-            const selectedTag = "{{ selected_tag or '' }}";
-            const matchesTag = !selectedTag || video.tags.includes(selectedTag);
-            return matchesSearch && matchesTag;
+            return matchesSearch;
         });
 
         if (filteredVideos.length === 0) {
@@ -127,17 +118,56 @@
     // Add event listener to search input
     document.getElementById('search').addEventListener('input', filterVideos);
 
-    // Initial filter if there's a search query or tag
+    // Initial filter if there's a search query
     window.onload = filterVideos;
 </script>
 
 <style>
-    /* ... (existing styles) ... */
+    .index-page {
+        max-width: 1200px;
+        margin: 20px auto;
+        padding: 0 20px;
+    }
+
+    .filters {
+        margin-bottom: 20px;
+        text-align: center;
+    }
+
+    #search-form {
+        margin-bottom: 15px;
+    }
+
+    #search-form label {
+        font-weight: bold;
+        margin-right: 10px;
+    }
+
+    #search-form input[type="text"] {
+        width: 300px;
+        max-width: 100%;
+        padding: 8px;
+        border: 1px solid var(--card-border);
+        border-radius: 4px;
+        background-color: var(--card-background);
+        color: var(--text-color);
+    }
+
     .video-card h3 small {
         font-size: 0.8em;
         color: var(--text-color);
         opacity: 0.7;
-        display: block; /* Ensures it’s on a new line */
+        display: block;
+    }
+
+    @media (max-width: 600px) {
+        .index-page {
+            padding: 0 10px;
+        }
+
+        #search-form input[type="text"] {
+            width: 100%;
+        }
     }
 </style>
 {% endblock %}
