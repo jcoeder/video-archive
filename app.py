@@ -69,19 +69,48 @@ class Tag(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
 
-# Function to generate thumbnail from video (10th frame)
+# Function to generate thumbnail from video
 def generate_thumbnail(video_path, output_path):
     logger.debug(f"Generating thumbnail for {video_path} to {output_path}")
     vidcap = cv2.VideoCapture(video_path)
-    vidcap.set(cv2.CAP_PROP_POS_FRAMES, 9)
+    
+    # Get video properties
+    fps = vidcap.get(cv2.CAP_PROP_FPS)  # Frames per second
+    frame_count = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))  # Total frames
+    duration_minutes = (frame_count / fps) / 60  # Duration in minutes
+    
+    # Decide which frame to use
+    if duration_minutes > 40:
+        target_time = 5 * 60  # 5 minutes in seconds
+        target_frame = int(fps * target_time)  # Frame at 5 minutes
+        logger.debug(f"Video duration {duration_minutes:.2f} minutes (>40), using frame at 5 minutes: {target_frame}")
+    else:
+        target_frame = 9  # Default to 10th frame (0-based index)
+        logger.debug(f"Video duration {duration_minutes:.2f} minutes (<=40), using 10th frame")
+    
+    # Ensure target_frame is within bounds
+    if target_frame >= frame_count:
+        target_frame = frame_count - 1  # Use last frame if out of bounds
+    
+    vidcap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
     success, image = vidcap.read()
     if success:
-        image = cv2.resize(image, (250, 250), interpolation=cv2.INTER_AREA)
-        cv2.imwrite(output_path, image)
-        os.chmod(output_path, 0o775)  # Set rwxrwxr-x, group www-data inherited from service
-        logger.debug(f"Thumbnail generated successfully for {video_path}")
+        # Increase resolution to 500x500 for better quality (adjust as needed)
+        target_size = (500, 500)
+        
+        # Use INTER_LANCZOS4 for high-quality resizing
+        image = cv2.resize(image, target_size, interpolation=cv2.INTER_LANCZOS4)
+        
+        # Optional: Apply slight sharpening (unsharp mask)
+        gaussian = cv2.GaussianBlur(image, (5, 5), 1.0)
+        image = cv2.addWeighted(image, 1.5, gaussian, -0.5, 0)
+        
+        # Save with high JPEG quality (95 out of 100)
+        cv2.imwrite(output_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+        os.chmod(output_path, 0o775)  # Set rwxrwxr-x permissions
+        logger.debug(f"Thumbnail generated successfully for {video_path} at {target_size}")
     else:
-        logger.error(f"Failed to generate thumbnail for {video_path}")
+        logger.error(f"Failed to generate thumbnail for {video_path} at frame {target_frame}")
     vidcap.release()
 
 # Helper to compute SHA-256 checksum of a file
@@ -242,13 +271,23 @@ def index():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
+    current_user = get_current_user()
+    if not current_user:
+        flash('Session expired. Please log in again.')
+        return redirect(url_for('login'))
+
     all_tags = Tag.query.filter(Tag.videos.any()).order_by(Tag.name).all()
     selected_tag = request.args.get('tag', None)
     search_query = request.args.get('search', None)
 
+    # Filter videos based on user role
     query = Video.query.order_by(Video.upload_date.desc())
+    if not current_user.is_admin:
+        query = query.filter_by(user_id=current_user.id)  # Only user's videos
+    
     videos = query.all()
 
+    # Include uploader username in videos_json for client-side filtering
     videos_json = [
         {
             'id': video.id,
@@ -258,12 +297,16 @@ def index():
             'tags': [tag.name for tag in video.tags],
             'notes': video.notes or '',
             'transcription': video.transcription or '',
-            'user_id': video.user_id
+            'user_id': video.user_id,
+            'uploader': db.session.get(User, video.user_id).username if db.session.get(User, video.user_id) else 'Unknown'
         } for video in videos
     ]
 
-    logger.info(f"Rendering index page for user {get_current_user().username if get_current_user() else 'anonymous'}")
-    return render_template('index.html', videos=videos, all_tags=all_tags, selected_tag=selected_tag, search_query=search_query, videos_json=json.dumps(videos_json))
+    logger.info(f"Rendering index page for user {current_user.username}")
+    # Pass videos with their User objects for template rendering
+    return render_template('index.html', videos=[(video, db.session.get(User, video.user_id)) for video in videos], 
+                         all_tags=all_tags, selected_tag=selected_tag, search_query=search_query, 
+                         videos_json=json.dumps(videos_json))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -312,9 +355,10 @@ def upload():
             if video and video.filename:
                 try:
                     checksum = compute_checksum(video)
-                    if db.session.query(Video).filter_by(checksum=checksum).first():
+                    # Check for duplicate only within the current user's uploads
+                    if db.session.query(Video).filter_by(checksum=checksum, user_id=current_user.id).first():
                         status[video.filename] = 'Duplicate detected'
-                        logger.debug(f"Duplicate video detected: {video.filename}")
+                        logger.debug(f"Duplicate video detected for user {current_user.username}: {video.filename}")
                         continue
 
                     # Sanitize filename: replace spaces and special characters
@@ -379,6 +423,12 @@ def view_video(id):
         logger.debug(f"Video {id} not found for user {current_user.username}")
         return redirect(url_for('index'))
 
+    # Restrict access to uploader or admin
+    if not current_user.is_admin and video.user_id != current_user.id:
+        flash('You can only view videos you uploaded.')
+        logger.debug(f"Unauthorized access attempt to video {id} by user {current_user.username}")
+        return redirect(url_for('index'))
+
     if request.method == 'POST':
         if 'notes' in request.form and 'tags' in request.form:
             notes = request.form['notes']
@@ -441,6 +491,12 @@ def view_transcription(id):
     if not video:
         flash('Video not found.')
         logger.debug(f"Transcription page: Video {id} not found")
+        return redirect(url_for('index'))
+
+    # Restrict access to uploader or admin
+    if not current_user.is_admin and video.user_id != current_user.id:
+        flash('You can only view transcriptions of videos you uploaded.')
+        logger.debug(f"Unauthorized transcription access attempt to video {id} by user {current_user.username}")
         return redirect(url_for('index'))
 
     if video.transcription_status != 'completed' or not video.transcription:

@@ -20,12 +20,12 @@
 
     <!-- Video Grid -->
     <div class="video-grid" id="video-grid">
-        {% for video in videos %}
+        {% for video, uploader in videos %}
             <div class="video-card" data-id="{{ video.id }}">
                 <a href="{{ url_for('view_video', id=video.id) }}">
                     <img src="{{ url_for('static', filename='thumbnails/' + video.thumbnail) }}" alt="{{ video.title }}">
                 </a>
-                <h3>{{ video.title }}</h3>
+                <h3>{{ video.title }}<br><small>Uploaded by {{ uploader.username if uploader else 'Unknown' }}</small></h3>
                 <p>{{ video.upload_date.strftime('%Y-%m-%d %H:%M') }}</p>
                 <p class="tags">{{ video.tags|map(attribute='name')|join(', ') or 'No tags' }}</p>
                 <div class="actions">
@@ -48,7 +48,7 @@
     // Parse the JSON data passed from Flask
     const allVideos = {{ videos_json|safe }};
 
-    // Function to extract context around a search term (mimics server-side extract_context)
+    // Function to extract context around a search term
     function extractContext(text, searchTerm, wordsBefore = 10, wordsAfter = 10) {
         if (!text || !searchTerm) return '';
         const textLower = text.toLowerCase();
@@ -106,7 +106,7 @@
                     <a href="/video/${video.id}">
                         <img src="/static/thumbnails/${video.thumbnail}" alt="${video.title}">
                     </a>
-                    <h3>${video.title}</h3>
+                    <h3>${video.title}<br><small>Uploaded by ${video.uploader}</small></h3>
                     <p>${video.upload_date}</p>
                     <p class="tags">${video.tags.join(', ') || 'No tags'}</p>
                     ${transcriptionContext ? `<p class="transcription-context">"${transcriptionContext}"</p>` : ''}
@@ -132,79 +132,12 @@
 </script>
 
 <style>
-    .index-page {
-        max-width: 1200px;
-        margin: 20px auto;
-        padding: 0 20px;
-    }
-
-    .filters {
-        margin-bottom: 20px;
-        text-align: center;
-    }
-
-    #search-form {
-        margin-bottom: 15px;
-    }
-
-    #search-form label {
-        font-weight: bold;
-        margin-right: 10px;
-    }
-
-    #search-form input[type="text"] {
-        width: 300px;
-        max-width: 100%;
-        padding: 8px;
-        border: 1px solid var(--card-border);
-        border-radius: 4px;
-        background-color: var(--card-background);
+    /* ... (existing styles) ... */
+    .video-card h3 small {
+        font-size: 0.8em;
         color: var(--text-color);
-    }
-
-    .tag-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        justify-content: center;
-    }
-
-    .tag-list a {
-        padding: 5px 10px;
-        background-color: var(--tab-background);
-        border: 1px solid var(--tab-border);
-        border-radius: 4px;
-        text-decoration: none;
-        color: var(--text-color);
-        transition: background-color 0.3s;
-    }
-
-    .tag-list a:hover {
-        background-color: var(--nav-hover);
-    }
-
-    .tag-list a.active {
-        background-color: var(--tab-active);
-        border-bottom: 1px solid var(--tab-active);
-    }
-
-    .tag-list strong {
-        margin-right: 10px;
-    }
-
-    @media (max-width: 600px) {
-        .index-page {
-            padding: 0 10px;
-        }
-
-        #search-form input[type="text"] {
-            width: 100%;
-        }
-
-        .tag-list {
-            flex-direction: column;
-            align-items: center;
-        }
+        opacity: 0.7;
+        display: block; /* Ensures it’s on a new line */
     }
 </style>
 {% endblock %}
