@@ -9,24 +9,24 @@ import hashlib
 import threading
 import whisper
 from pydub import AudioSegment
-from config import SECRET_KEY, SQLALCHEMY_DATABASE_URI, SQLALCHEMY_TRACK_MODIFICATIONS, UPLOAD_FOLDER, THUMBNAIL_FOLDER, LOG_FILE, LOG_LEVEL
-from sqlalchemy import or_
+from config import SECRET_KEY, SQLALCHEMY_DATABASE_URI, SQLALCHEMY_TRACK_MODIFICATIONS, UPLOAD_FOLDER, THUMBNAIL_FOLDER, LOG_FILE, LOG_LEVEL, DB_PROVIDER, DB_NAME
 import logging
 from logging.handlers import RotatingFileHandler
 import torch
 import json
 
 # Set up logging
-log_level = os.getenv('LOG_LEVEL', LOG_LEVEL).upper()  # Use env var or config default
+log_level = LOG_LEVEL.upper()
 logging.basicConfig(
     level=getattr(logging, log_level, logging.INFO),
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.StreamHandler(),  # Log to stdout
+        RotatingFileHandler(LOG_FILE, maxBytes=10*1024*1024, backupCount=5)
+    ]
 )
-handler = RotatingFileHandler(LOG_FILE, maxBytes=10*1024*1024, backupCount=5)  # 10MB per file, 5 backups
-handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s', '%Y-%m-%d %H:%M:%S'))
 logger = logging.getLogger(__name__)
-logger.addHandler(handler)
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -35,8 +35,15 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['THUMBNAIL_FOLDER'] = THUMBNAIL_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 12 * 1024 * 1024 * 1024  # 12GB limit
+app.config['DB_PROVIDER'] = DB_PROVIDER
+app.config['DB_NAME'] = DB_NAME
 
 db = SQLAlchemy(app)
+
+# Set FFmpeg paths for pydub
+from pydub import AudioSegment
+AudioSegment.ffmpeg = "/usr/bin/ffmpeg"
+AudioSegment.ffprobe = "/usr/bin/ffprobe"
 
 # Association table for many-to-many relationship between Video and Tag
 video_tags = db.Table('video_tags',
@@ -95,19 +102,19 @@ def generate_thumbnail(video_path, output_path):
     vidcap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
     success, image = vidcap.read()
     if success:
-        # Increase resolution to 500x500 for better quality (adjust as needed)
+        # Increase resolution to 500x500 for better quality
         target_size = (500, 500)
         
         # Use INTER_LANCZOS4 for high-quality resizing
         image = cv2.resize(image, target_size, interpolation=cv2.INTER_LANCZOS4)
         
-        # Optional: Apply slight sharpening (unsharp mask)
+        # Apply slight sharpening (unsharp mask)
         gaussian = cv2.GaussianBlur(image, (5, 5), 1.0)
         image = cv2.addWeighted(image, 1.5, gaussian, -0.5, 0)
         
         # Save with high JPEG quality (95 out of 100)
         cv2.imwrite(output_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
-        os.chmod(output_path, 0o775)  # Set rwxrwxr-x permissions
+        os.chmod(output_path, 0o775)
         logger.debug(f"Thumbnail generated successfully for {video_path} at {target_size}")
     else:
         logger.error(f"Failed to generate thumbnail for {video_path} at frame {target_frame}")
@@ -230,6 +237,10 @@ app.jinja_env.globals['get_current_user'] = get_current_user
 with app.app_context():
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs(app.config['THUMBNAIL_FOLDER'], exist_ok=True)
+    if app.config['DB_PROVIDER'].lower() == 'sqlite':
+        db_path = os.path.join(app.instance_path, f"{app.config['DB_NAME']}.db")
+        os.makedirs(app.instance_path, exist_ok=True)
+        os.chmod(app.instance_path, 0o775)
     db.create_all()
     if not db.session.query(User).filter_by(username='admin').first():
         admin = User(
@@ -356,7 +367,6 @@ def upload():
                         logger.debug(f"Duplicate video detected for user {current_user.username}: {video.filename}")
                         continue
 
-                    # Sanitize filename: replace spaces and special characters
                     safe_filename = video.filename.replace(' ', '_').replace('[', '').replace(']', '')
                     filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_filename}"
                     title = video.filename
