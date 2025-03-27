@@ -24,7 +24,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO videoarchive
 
 Create user and set permissions
 ```
-sudo adduser --system --no-create-home -home /nonexistent videoarchive
+sudo adduser --system --group --home /home/videoarchive videoarchive
 sudo usermod -s /bin/bash videoarchive
 cd /opt/
 sudo git clone https://github.com/jcoeder/videoarchive.git
