@@ -11,9 +11,14 @@ sudo -u postgres psql
 
 Create DB
 ```
+CREATE ROLE videoarchive WITH LOGIN PASSWORD 'Password123';
 CREATE DATABASE videoarchive;
-CREATE USER videoarchive WITH PASSWORD 'Password123';
 GRANT ALL PRIVILEGES ON DATABASE videoarchive TO videoarchive;
+\c videoarchive
+GRANT USAGE, CREATE ON SCHEMA public TO videoarchive;
+ALTER SCHEMA public OWNER TO videoarchive;  -- Make videoarchive the owner
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO videoarchive;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO videoarchive;
 \q
 ```
 
