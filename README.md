@@ -33,7 +33,7 @@ sudo chmod 660 /var/log/videoarchive.log
 Setup venv
 ```
 sudo su - videoarchive
-python3.11 -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements
 exit
