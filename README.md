@@ -24,7 +24,7 @@ sudo usermod -s /bin/bash videoarchive
 cd /opt/
 sudo git clone https://github.com/jcoeder/videoarchive.git
 sudo mkdir -p /opt/videoarchive/static/uploads /opt/videoarchive/static/thumbnails
-sudo chown -r videoarchive:videoarchive /opt/videoarchive
+sudo chown -R videoarchive:videoarchive /opt/videoarchive
 sudo touch /var/log/videoarchive.log
 sudo chown videoarchive:videoarchive /var/log/videoarchive.log
 sudo chmod 660 /var/log/videoarchive.log
