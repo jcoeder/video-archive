@@ -19,7 +19,7 @@ GRANT ALL PRIVILEGES ON DATABASE videoarchive TO videoarchive;
 
 Create user and set permissions
 ```
-sudo adduser --system --group --no-create-home videoarchive
+sudo adduser --system --no-create-home -home /nonexistent videoarchive
 sudo usermod -s /bin/bash videoarchive
 cd /opt/
 sudo git clone https://github.com/jcoeder/videoarchive.git
