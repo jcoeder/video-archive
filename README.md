@@ -63,6 +63,8 @@ sudo systemctl status videoarchive.service
 
 Setup nginx
 ```
+sudo rm /etc/nginx/sites-available/default
+sudo rm /etc/nginx/sites-enabled/default
 sudo cp /opt/videoarchive/setup/videoarchive.nginx /etc/nginx/sites-available/videoarchive
 sudo ln -s /etc/nginx/sites-available/videoarchive /etc/nginx/sites-enabled/
 sudo systemctl enable nginx
