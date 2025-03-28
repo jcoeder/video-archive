@@ -1,5 +1,8 @@
 Install deps
 ```
+sudo apt install postgresql-16 libpq-dev python3 python3-dev python3-venv python3-pip libopencv-dev ffmpeg nginx -y
+```
+```
 sudo apt install postgresql-16 build-essential libpq-dev python3 python3-dev python3-venv python3-pip libopencv-dev ffmpeg postgresql-contrib nginx -y
 ```
 
